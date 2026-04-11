@@ -1,0 +1,60 @@
+% Modern Preamble using System Fonts
+\usepackage{fontspec}
+
+% Colors
+\usepackage[dvipsnames]{xcolor}
+\definecolor{DeepBlue}{HTML}{2e4a62}
+\definecolor{LinkBlue}{HTML}{0078d4}
+
+% Typography - Using guaranteed Windows fonts
+\setmainfont{Georgia}         % Elegant Serif
+\setsansfont{Arial}           % Clean Sans-serif
+\setmonofont{Consolas}        % Professional Mono
+
+% Section Header Styling
+\usepackage{titlesec}
+\titleformat{\section}{\color{DeepBlue}\Large\bfseries\sffamily}{\thesection}{1em}{}
+\titleformat{\subsection}{\color{DeepBlue}\large\bfseries\sffamily}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\color{DeepBlue}\normalsize\bfseries\sffamily}{\thesubsubsection}{1em}{}
+
+% Captions
+\usepackage{caption}
+\DeclareCaptionFont{deepblue}{\color{DeepBlue}}
+\captionsetup{font=small,labelfont={bf,deepblue},textfont=it}
+
+% Page Layout
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+\fancyhead[L]{\small\color{gray}\sffamily\leftmark}
+\fancyhead[R]{\small\color{gray}\thepage}
+
+% Links
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=LinkBlue,
+    filecolor=LinkBlue,      
+    urlcolor=LinkBlue,
+    citecolor=LinkBlue,
+}
+
+% Tables
+\usepackage{booktabs}
+\usepackage{array}
+
+% Spacing
+\usepackage{microtype}
+\usepackage{setspace}
+\setstretch{1.15}
+
+% Custom Title Page
+\usepackage{titling}
+\pretitle{\begin{center}\color{DeepBlue}\huge\bfseries\sffamily}
+\posttitle{\end{center}}
+\preauthor{\begin{center}\large\sffamily}
+\postauthor{\end{center}}
+\predate{\begin{center}\sffamily\itshape}
+\postdate{\end{center}}

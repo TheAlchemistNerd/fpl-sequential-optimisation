@@ -1,0 +1,112 @@
+"""Orchestrated data pipeline (Prefect / cron compatible).
+
+This module provides the weekly data-collection pipeline that:
+1. Fetches fresh FPL API data (public + protected).
+2. Runs feature engineering.
+3. Triggers Bayesian model updates (HDP posteriors).
+4. Logs metrics to MLflow.
+
+Can be run standalone::
+
+    python -m src.pipeline.data_pipeline
+
+Or scheduled via Prefect / Apache Airflow.
+"""
+
+from __future__ import annotations
+
+import logging
+import sys
+from pathlib import Path
+
+import pandas as pd
+
+# Ensure project root is on sys.path when run as __main__
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from src.api.data_fetcher import fetch_all_data
+from src.config.settings import settings
+
+log = logging.getLogger(__name__)
+
+
+def run_pipeline(latest_gameweek: int) -> None:
+    """Execute the full weekly data + model-update pipeline.
+
+    Parameters
+    ----------
+    latest_gameweek : int
+        The most recently completed gameweek.
+    """
+    log.info("=" * 60)
+    log.info("Starting FPL data pipeline for GW %d", latest_gameweek)
+    log.info("=" * 60)
+
+    # Step 1 – Fetch all data
+    import asyncio
+    asyncio.run(fetch_all_data(latest_gameweek))
+
+    # Step 2 – Feature engineering
+    features = engineer_features()
+
+    # Step 3 – Model update (placeholder – wire to HDP models)
+    update_hdp_models(features)
+
+    log.info("Pipeline complete for GW %d.", latest_gameweek)
+
+
+def engineer_features() -> pd.DataFrame:
+    """Load raw CSVs and produce the feature matrix for modelling.
+
+    Returns
+    -------
+    pd.DataFrame
+        Rows = player-gameweek observations, columns = engineered features.
+    """
+    data_dir = settings.DATA_DIR
+    log.info("Engineering features from %s …", data_dir)
+
+    gw_df = pd.read_csv(data_dir / "fpl_gameweek_data.csv")
+    players_df = pd.read_csv(data_dir / "fpl_players.csv")
+
+    # Parse stats column if present
+    if "stats" in gw_df.columns:
+        import ast
+        stats_expanded = gw_df["stats"].apply(
+            lambda x: ast.literal_eval(x) if isinstance(x, str) else x
+        ).apply(pd.Series)
+        gw_df = pd.concat([gw_df.drop(columns=["stats"]), stats_expanded], axis=1)
+
+    # Merge player metadata
+    players_df["full_name"] = players_df["first_name"] + " " + players_df["second_name"]
+    merged = pd.merge(gw_df, players_df[["id", "full_name", "element_type", "team"]], on="id", how="left")
+
+    # Rolling averages (form)
+    for col in ["total_points", "minutes", "goals_scored", "assists"]:
+        if col in merged.columns:
+            merged[f"{col}_roll_3"] = (
+                merged.groupby("id")[col]
+                .transform(lambda s: s.rolling(3, min_periods=1).mean())
+            )
+
+    log.info("  → %d rows, %d columns", len(merged), merged.shape[1])
+    return merged
+
+
+def update_hdp_models(features: pd.DataFrame) -> None:
+    """Run Bayesian model updates with the latest feature matrix.
+
+    TODO: Wire to ``src.models.hdp_gmm``, ``hdp_poisson_gamma``,
+    ``hdp_negbin`` and log posteriors to MLflow.
+    """
+    log.info("HDP model update – not yet implemented.")
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    gw = int(sys.argv[1]) if len(sys.argv) > 1 else 5
+    run_pipeline(gw)

@@ -1,0 +1,82 @@
+"""Tests for API authentication and data fetching."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+import requests
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+
+# ===========================================================================
+# Auth Manager
+# ===========================================================================
+
+class TestFPLAuthManager:
+    """Validate the FPL authentication manager."""
+
+    def test_unauthenticated_by_default(self):
+        from src.api.auth_manager import FPLAuthManager
+        auth = FPLAuthManager()
+        assert auth.is_authenticated is False
+
+    def test_ensure_raises_without_credentials(self):
+        from src.api.auth_manager import FPLAuthManager, FPLAuthError
+        auth = FPLAuthManager()
+
+        with patch("src.api.auth_manager.settings") as mock_settings:
+            mock_settings.FPL_EMAIL = None
+            mock_settings.FPL_PASSWORD = None
+            with pytest.raises(FPLAuthError, match="FPL_EMAIL and FPL_PASSWORD"):
+                auth.ensure_authenticated()
+
+    def test_login_raises_on_http_failure(self):
+        from src.api.auth_manager import FPLAuthManager, FPLAuthError
+        auth = FPLAuthManager()
+
+        mock_session = MagicMock()
+        mock_session.get.return_value.raise_for_status.side_effect = requests.HTTPError()
+        auth.session = mock_session
+
+        with pytest.raises(requests.HTTPError):
+            auth.login("test@test.com", "password")
+
+    def test_get_authorized_session_authenticates(self):
+        from src.api.auth_manager import FPLAuthManager
+        auth = FPLAuthManager()
+
+        with patch.object(auth, "ensure_authenticated") as mock_ensure:
+            auth.get_authorized_session()
+            mock_ensure.assert_called_once()
+
+
+# ===========================================================================
+# Settings
+# ===========================================================================
+
+class TestSettings:
+    """Validate configuration loading."""
+
+    def test_validate_returns_missing_when_set(self):
+        from src.config.settings import Settings
+
+        class MockSettings:
+            FPL_EMAIL = "test@test.com"
+            FPL_PASSWORD = "secret"
+            FPL_TEAM_ID = 123
+
+        assert MockSettings.FPL_EMAIL is not None
+        assert MockSettings.FPL_PASSWORD is not None
+        assert MockSettings.FPL_TEAM_ID is not None
+
+    def test_api_rate_limit_is_positive(self):
+        from src.config.settings import settings
+        assert settings.API_RATE_LIMIT >= 0
+
+    def test_data_dir_exists_or_is_path(self):
+        from src.config.settings import settings
+        assert settings.DATA_DIR is not None

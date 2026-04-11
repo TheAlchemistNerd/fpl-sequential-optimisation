@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual environments
+fpl_prediction/
+venv/
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Qwen Code
+.qwen/
+
+# Data (large files – use DVC instead)
+data/*.csv
+data/*.json
+data/*.parquet
+!data/.gitkeep
+
+# Literature (PDFs tracked separately)
+literature/
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# Reports / figures
+reports/figures/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
+
+# DVC
+.dvc/
+.dvc
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Type checking
+.mypy_cache/
+
+# Build artifacts
+*.pdf
+*.aux
+*.toc
+*.out

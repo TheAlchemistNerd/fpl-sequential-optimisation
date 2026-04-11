@@ -1,0 +1,437 @@
+# Chapter 7: Posterior Inference — MCMC, Gibbs Sampling, NUTS, and Acceleration Techniques
+
+## 7.1 Introduction
+
+The models developed in Chapters 5 and 6 — the HDP-GMM and HDP-HMM — are Bayesian hierarchical models with complex dependency structures and an unbounded number of latent variables. The posterior distributions over the model parameters and latent states are analytically intractable, necessitating approximate inference methods.
+
+This chapter provides a comprehensive treatment of the posterior inference techniques employed in the FPL sequential optimisation system. The topics covered include:
+
+1. **Gibbs sampling** for the HDP-GMM and HDP-HMM, leveraging conjugacy for closed-form updates.
+2. **NUTS (No-U-Turn Sampler)** via NumPyro, a gradient-based MCMC method that handles non-conjugate models.
+3. **Numba acceleration** for loop-intensive Gibbs sampling steps.
+4. **Variational Inference (VI)** as a faster alternative to MCMC.
+5. **Convergence diagnostics** to ensure the MCMC chains have reached the true posterior.
+
+### 7.1.1 From Posterior Inference to Belief-State Decision-Making
+
+It is critical to understand that the posterior samples produced by MCMC are **not endpoints** of the analysis — they are the **belief-state representation** that the decision engines in Chapters 8 and 9 operate on directly. The posterior samples over $(\mu_k, \Sigma_k, \pi_k, z)$ encode the full distributional uncertainty about each player's latent form profile. Thompson Sampling, Monte Carlo Tree Search, and DDQN all consume these belief states as their mathematical input.
+
+This connection formalizes the FPL problem as a **Partially Observable Markov Decision Process (POMDP)**, defined rigorously in Chapter 9 (Section 9.2). In a POMDP, the agent does not observe the true state $s_t$ (the player's actual form); instead, it maintains a **belief state** $b_t = P(s_t \mid \text{observations})$, which is precisely the posterior distribution computed by the MCMC methods in this chapter. The RL agents in subsequent chapters do not operate on point estimates; they operate on **distributions over belief states**, enabling them to reason about and hedge against uncertainty in a mathematically principled way.
+
+The pipeline is:
+
+$$\text{MCMC (Ch. 7)} \;\rightarrow\; \{b_j^{(s)}(t)\}_{s=1}^S \;\rightarrow\; \text{Thompson Sampling (Ch. 8)} \;\rightarrow\; \text{TS+MCTS / DDQN (Ch. 9)}.$$
+
+This chapter establishes the inference machinery; the next chapters show how these belief states drive optimal sequential decisions.
+
+## 7.2 Gibbs Sampling for the HDP-GMM
+
+### 7.2.1 Overview
+
+Gibbs sampling is a Markov Chain Monte Carlo (MCMC) method that generates samples from a joint posterior by iteratively sampling each variable from its full conditional distribution, given the current values of all other variables. For the HDP-GMM, the variables are:
+
+- Global concentration parameter: $\gamma$
+- Stick-breaking weights: $\boldsymbol{\beta}' = (\beta'_1, \ldots, \beta'_{K-1})$
+- Player-specific concentration: $\alpha$
+- Player-specific mixture weights: $\boldsymbol{\pi}_j$ for each player $j$
+- Cluster assignments: $z_{j,i}$ for each observation
+- Cluster parameters: $(\mu_k, \Sigma_k)$ for each cluster $k$
+
+### 7.2.2 Full Conditional for Cluster Assignments
+
+The full conditional for $z_{j,i}$ is:
+
+$$P(z_{j,i} = k \mid \mathbf{z}_{-ji}, \mathbf{x}, \boldsymbol{\pi}_j, \{\mu_k, \Sigma_k\}) \propto \pi_{j,k} \cdot \mathcal{N}(x_{j,i} \mid \mu_k, \Sigma_k).$$
+
+Sampling is straightforward:
+
+$$z_{j,i} \sim \text{Categorical}\left( \frac{\pi_{j,k} \cdot \mathcal{N}(x_{j,i} \mid \mu_k, \Sigma_k)}{\sum_{k'} \pi_{j,k'} \cdot \mathcal{N}(x_{j,i} \mid \mu_{k'}, \Sigma_{k'})} \right).$$
+
+### 7.2.3 Full Conditional for Cluster Parameters
+
+Given the NIW prior and Gaussian likelihood, the full conditional for $(\mu_k, \Sigma_k)$ is:
+
+$$(\mu_k, \Sigma_k) \mid \mathbf{z}, \mathbf{x} \sim \text{NIW}(m_k, \kappa_k, \Psi_k, \nu_k),$$
+
+with parameters as derived in Chapter 5 (Section 5.3.2). Sampling from the NIW proceeds in two steps:
+
+1. Sample $\Sigma_k \sim \text{Inverse-Wishart}_{\nu_k}(\Psi_k)$.
+2. Sample $\mu_k \mid \Sigma_k \sim \mathcal{N}(m_k, \Sigma_k / \kappa_k)$.
+
+### 7.2.4 Full Conditional for Stick-Breaking Weights
+
+The full conditional for $\beta'_k$ is:
+
+$$\beta'_k \mid \mathbf{z}, \gamma \sim \text{Beta}\left(1 + n_k, \;\; \gamma + \sum_{\ell=k+1}^K n_\ell \right),$$
+
+where $n_k$ is the number of observations assigned to cluster $k$. This follows from the conjugacy of the Beta-Binomial model.
+
+### 7.2.5 Full Conditional for Concentration Parameters
+
+For the global concentration $\gamma$, the auxiliary variable method (Escobar & West, 1995) is employed. An auxiliary variable $\eta \sim \text{Beta}(\gamma + 1, N)$ is introduced:
+
+$$P(\eta \mid \gamma, N) = \text{Beta}(\gamma + 1, N).$$
+
+Then the full conditional for $\gamma$ is a mixture of two Gamma distributions:
+
+$$\gamma \mid \eta, \mathbf{z} \sim \pi_\gamma \cdot \text{Gamma}(a_\gamma + K, b_\gamma - \log \eta) + (1 - \pi_\gamma) \cdot \text{Gamma}(a_\gamma + K - 1, b_\gamma - \log \eta),$$
+
+where the mixture weight $\pi_\gamma$ satisfies:
+
+$$\frac{\pi_\gamma}{1 - \pi_\gamma} = \frac{a_\gamma + K - 1}{N(b_\gamma - \log \eta)}.$$
+
+Similarly for the player-specific concentration $\alpha$:
+
+$$\alpha \mid \eta_j, \mathbf{z} \sim \pi_\alpha \cdot \text{Gamma}(a_\alpha + K_j, b_\alpha - \log \eta_j) + (1 - \pi_\alpha) \cdot \text{Gamma}(a_\alpha + K_j - 1, b_\alpha - \log \eta_j).$$
+
+## 7.3 Gibbs Sampling for the HDP-HMM
+
+### 7.3.1 State Trajectory Sampling via FFBS
+
+The HDP-HMM requires sampling the entire state trajectory $\mathbf{z}_{j,1:T_j}$ for each player, rather than individual assignments. This is done using the Forward-Filtering Backward-Sampling (FFBS) algorithm, described in detail in Chapter 6 (Section 6.3).
+
+The computational complexity of FFBS is $O(T_j \cdot K^2)$ per player per iteration, which is more expensive than the $O(T_j \cdot K)$ complexity of the HDP-GMM's per-observation updates.
+
+### 7.3.2 Transition Matrix Updates
+
+The full conditional for the transition matrix $\boldsymbol{\pi}_k$ is:
+
+$$\boldsymbol{\pi}_k \mid \mathbf{z}, \alpha, \boldsymbol{\beta} \sim \text{Dir}(\alpha \beta_1 + n_{k \to 1}, \ldots, \alpha \beta_K + n_{k \to K}),$$
+
+where $n_{k \to \ell} = \sum_{j,t} \mathbb{I}(z_{j,t-1} = k, z_{j,t} = \ell)$ is the count of transitions from state $k$ to state $\ell$.
+
+### 7.3.3 Full HDP-HMM Gibbs Sampler
+
+```
+for iteration = 1 to N:
+    # Update global parameters
+    Sample γ (auxiliary variable method)
+    Sample β'_k ~ Beta(1 + n_k, γ + Σ_{ℓ>k} n_ℓ)
+
+    # Update emission parameters
+    For each cluster k:
+        Compute sufficient statistics
+        Sample (μ_k, Σ_k) ~ NIW(m_k, κ_k, Ψ_k, ν_k)
+
+    # Update transition matrices
+    For each state k:
+        Count transitions n_{k→ℓ}
+        Sample π_k ~ Dir(α·β_1 + n_{k→1}, ..., α·β_K + n_{k→K})
+
+    # Update state trajectories (FFBS)
+    For each player j:
+        Forward filter: compute α_t(k)
+        Backward sample: sample z_{j,1:T_j}
+```
+
+## 7.4 NUTS via NumPyro
+
+### 7.4.1 Hamiltonian Monte Carlo
+
+Hamiltonian Monte Carlo (HMC) is an MCMC method that uses gradient information to propose distant moves with high acceptance probability. It introduces an auxiliary momentum variable $\mathbf{r}$ and simulates the Hamiltonian dynamics:
+
+$$H(\theta, \mathbf{r}) = -\log p(\theta \mid \text{data}) + \frac{1}{2} \mathbf{r}^\top M^{-1} \mathbf{r},$$
+
+where $p(\theta \mid \text{data})$ is the target posterior, and $M$ is a mass matrix.
+
+The dynamics are:
+
+$$\frac{d\theta}{dt} = \frac{\partial H}{\partial \mathbf{r}} = M^{-1} \mathbf{r}, \quad \frac{d\mathbf{r}}{dt} = -\frac{\partial H}{\partial \theta} = \nabla_\theta \log p(\theta \mid \text{data}).$$
+
+These are simulated using the leapfrog integrator, which preserves volume and is time-reversible.
+
+### 7.4.2 No-U-Turn Sampler (NUTS)
+
+The No-U-Turn Sampler (Hoffman & Gelman, 2014) is an extension of HMC that automatically tunes the trajectory length, eliminating the need to specify the number of leapfrog steps. It builds a balanced binary tree of leapfrog steps and stops when the trajectory begins to double back on itself (the "U-turn" condition):
+
+$$\langle \theta_{\text{end}} - \theta_{\text{start}}, \mathbf{r}_{\text{start}} \rangle < 0.$$
+
+NUTS is particularly effective for high-dimensional, correlated posteriors, as it adapts to the local geometry.
+
+### 6.4.3 NUTS Configuration
+
+The NUTS sampler is configured with the following settings:
+
+```
+Algorithm: NUTS Configuration for HDP-GMM
+Input: Model specification (Chapter 5, Section 5.8), data X
+Output: Posterior samples
+
+Configuration:
+    num_warmup ← 500                         // warmup (burn-in) iterations
+    num_samples ← 1000                        // post-warmup samples to collect
+    num_chains ← 4                            // independent chains for convergence diagnostics
+    dense_mass ← True                         // estimate full mass matrix for kinetic energy
+
+Execution:
+    Run NUTS with the above configuration
+    Collect samples: {γ^(s), α^(s), β^(s), μ^(s), Σ^(s), z^(s)} for s = 1 to num_samples
+
+Key properties:
+    - JIT compilation compiles the entire log-density and gradient into a single operation
+    - Automatic differentiation computes ∇_θ log p(θ | data) without manual derivation
+    - Dense mass matrix captures correlations between parameters, improving mixing
+    - 4 independent chains enable Gelman-Rubin r_hat convergence diagnostic
+```
+
+### 7.4.4 Advantages over Gibbs Sampling
+
+| Aspect | Gibbs Sampling | NUTS |
+|--------|---------------|------|
+| Conjugacy required | Yes | No |
+| Correlated parameters | Poor mixing | Excellent (dense mass) |
+| Parallelisation | Limited (sequential) | Full (JAX vmap) |
+| GPU/TPU support | Manual (Numba) | Native (JAX) |
+| Hyperparameter tuning | Manual (concentration updates) | Automatic (step size, mass matrix) |
+| Discrete variables | Natural (categorical sampling) | Requires marginalisation |
+
+NUTS is preferred when the model is non-conjugate (e.g., when incorporating neural network components) or when parameters are highly correlated. Gibbs sampling is preferred for the purely conjugate HDP-GMM, as the closed-form updates are exact and fast.
+
+## 7.5 Numba Acceleration for Gibbs Sampling
+
+### 7.5.1 Motivation
+
+Gibbs sampling for the HDP-GMM involves iterating over all observations ($N = \sum_j T_j$) and all clusters ($K$) at each iteration. For $N \approx 10{,}000$ and $K \approx 20$, a single iteration involves $200{,}000$ updates. In pure Python, this is prohibitively slow.
+
+### 7.5.2 JIT Compilation for Gibbs Steps
+
+The computationally intensive loop in the Gibbs cluster assignment update can be accelerated using just-in-time (JIT) compilation. The following pseudocode describes the accelerated step:
+
+```
+Algorithm: Accelerated Gibbs Cluster Assignment Update
+Input: Data matrix X (N × D), cluster means μ (K × D), covariances Σ (K × D × D),
+       mixture weights π (K), current assignments z (N)
+Output: Updated cluster assignments z
+
+Precompute:
+    inv_Σ[k] ← inverse(Σ[k]) for each cluster k       // done once per iteration
+    log_det_Σ[k] ← log_determinant(Σ[k]) for each k
+
+For each observation i = 1 to N:
+    For each cluster k = 1 to K:
+        diff ← X[i] - μ[k]
+        // Mahalanobis distance: (x - μ)ᵀ Σ⁻¹ (x - μ)
+        mahal ← diffᵀ · inv_Σ[k] · diff
+        // Log-likelihood of multivariate Gaussian
+        log_likelihood ← -0.5 × (D × log(2π) + log_det_Σ[k] + mahal)
+        // Log-posterior: log prior + log likelihood
+        log_posterior[k] ← log(π[k]) + log_likelihood
+
+    // Numerically stable softmax normalisation
+    max_log ← max(log_posterior)
+    probs ← exp(log_posterior - max_log)
+    probs ← probs / sum(probs)
+
+    // Sample new cluster assignment
+    z[i] ← sample from Categorical(probs)
+
+Return z
+```
+
+The JIT compiler translates this loop-intensive computation into optimised machine code, achieving a 10–30x speedup over interpreted execution. The key operations — matrix inversion, determinant computation, and the inner loop over K clusters — benefit most from compilation.
+
+### 7.5.3 Speedup Analysis
+
+The speedup from Numba depends on the loop intensity and the operations involved:
+
+- **Cluster assignment updates**: 20–50x speedup (loop-intensive, simple arithmetic).
+- **Transition matrix updates**: 5–10x speedup (Dirichlet sampling is already vectorised).
+- **NIW parameter sampling**: 2–5x speedup (matrix operations are already optimised by BLAS).
+
+Overall, the full Gibbs sampler achieves a **10–30x speedup** with Numba, reducing the time per iteration from seconds to milliseconds.
+
+### 7.5.4 Parallel Chain Execution
+
+Multiple MCMC chains are run in parallel on separate CPU cores or GPU streams to assess convergence:
+
+```
+Algorithm: Parallel MCMC Chains
+Input: Model specification, data X, number of chains C = 4
+Output: Samples from C independent chains
+
+For each chain c = 1 to C in parallel:
+    Set random seed: seed_c ← base_seed + c
+    Initialise parameters from prior: θ_c^(0) ~ p(θ)
+    Run MCMC (Gibbs or NUTS) for num_iterations
+    Collect samples: {θ_c^(s)} for s = 1 to num_samples
+
+Return {θ_c^(s)} for all c, s
+```
+
+Running independent chains with different initialisations enables the Gelman-Rubin r_hat diagnostic (Section 7.7.2), which compares within-chain and between-chain variances to assess convergence.
+
+## 7.6 Variational Inference
+
+### 7.6.1 Overview
+
+Variational Inference (VI) frames posterior approximation as an optimisation problem. Rather than sampling from the posterior, VI finds the closest distribution $q(\theta)$ in a tractable family $\mathcal{Q}$ to the true posterior $p(\theta \mid \text{data})$, as measured by the Kullback-Leibler (KL) divergence:
+
+$$q^*(\theta) = \arg\min_{q \in \mathcal{Q}} \text{KL}(q(\theta) \parallel p(\theta \mid \text{data})).$$
+
+### 7.6.2 Evidence Lower Bound (ELBO)
+
+Minimising KL divergence is equivalent to maximising the Evidence Lower Bound (ELBO):
+
+$$\text{ELBO}(q) = \mathbb{E}_q[\log p(\text{data}, \theta)] - \mathbb{E}_q[\log q(\theta)].$$
+
+The ELBO is a lower bound on the log marginal likelihood:
+
+$$\log p(\text{data}) \geq \text{ELBO}(q).$$
+
+### 7.6.3 Mean-Field Approximation
+
+The mean-field VI family assumes independence between groups of variables:
+
+$$q(\theta) = \prod_{g} q_g(\theta_g).$$
+
+For the HDP-GMM, the factorisation is:
+
+$$q(\gamma, \boldsymbol{\beta}', \alpha, \{\boldsymbol{\pi}_j\}, \{z_{j,i}\}, \{(\mu_k, \Sigma_k)\}) = q(\gamma) \prod_k q(\beta'_k) \cdot q(\alpha) \prod_j q(\boldsymbol{\pi}_j) \prod_{j,i} q(z_{j,i}) \prod_k q(\mu_k, \Sigma_k).$$
+
+Each factor is optimised by coordinate ascent, setting:
+
+$$\log q_g^*(\theta_g) = \mathbb{E}_{q_{-g}}[\log p(\text{data}, \theta)] + \text{const}.$$
+
+### 7.6.4 Jensen-Shannon Divergence Alternative
+
+The standard KL divergence $\text{KL}(q \parallel p)$ is asymmetric and tends to produce under-dispersed approximations (zero-forcing behaviour). The **Jensen-Shannon Divergence (JSD)** provides a symmetric alternative:
+
+$$\text{JSD}(q \parallel p) = \frac{1}{2} \text{KL}\left(q \parallel \frac{q + p}{2}\right) + \frac{1}{2} \text{KL}\left(p \parallel \frac{q + p}{2}\right).$$
+
+Maximising the JSD-based objective yields approximations that are less prone to mode collapse, potentially capturing multiple posterior modes. This is particularly relevant for the HDP-GMM, where the posterior over cluster assignments may be multi-modal.
+
+### 7.6.5 Stochastic Variational Inference
+
+For large datasets, Stochastic VI (SVI) subsamples the data at each iteration:
+
+```
+Algorithm: Stochastic Variational Inference for HDP-GMM
+Input: Data X (N × D), guide distribution family Q_φ, num_steps
+Output: Optimal variational parameters φ*
+
+Initialise: φ ← random initialisation
+For step = 1 to num_steps:
+    // Sample minibatch
+    B ← random sample of size |B| from {1, ..., N}
+
+    // Estimate ELBO gradient
+    elbo_estimate ← (N / |B|) × Σ_{i ∈ B} E_q[log p(x_i | θ)] - KL(q(θ) || p(θ))
+
+    // Compute gradient and update
+    g ← ∇_φ elbo_estimate
+    φ ← φ + η × g                        // η is learning rate
+
+    // Decay learning rate
+    η ← η × decay_rate
+
+Return φ*
+```
+
+This reduces the per-iteration cost from O(N) to O(|B|), enabling scalability to millions of observations. The guide distribution q_φ(θ) is typically chosen as a factorised Gaussian (mean-field approximation), with parameters φ optimised via gradient ascent on the ELBO.
+
+### 7.6.6 VI vs. MCMC Trade-offs
+
+| Aspect | MCMC (Gibbs/NUTS) | Variational Inference |
+|--------|-------------------|----------------------|
+| Accuracy | Asymptotically exact | Approximate (lower bound) |
+| Speed | Slow (many iterations) | Fast (optimisation) |
+| Scalability | Limited by chain length | Excellent (minibatching) |
+| Uncertainty quantification | Full posterior samples | Factorised approximation |
+| Implementation | Simple (conjugate models) | Requires guide specification |
+
+For the FPL problem, MCMC is employed for offline model fitting (where accuracy is paramount) and VI for rapid online updates (where speed is critical).
+
+## 7.7 Convergence Diagnostics
+
+Empirical convergence results for all diagnostics discussed in this section are reported in Chapter 12, Section 12.3, including trace plots, Gelman-Rubin $\hat{R}$ values, Effective Sample Size (ESS), and Geweke z-scores for the FPL dataset.
+
+### 7.7.1 Trace Plots
+
+The simplest diagnostic is a visual inspection of the trace plots — the sampled values of each parameter plotted against iteration number. A well-mixing chain shows rapid fluctuations around a stable mean, with no trends or long excursions. Chapter 12, Figure 12.1 presents trace plots of $\gamma$, $\alpha$, and representative $\mu_k$ diagonal elements across the 4 MCMC chains.
+
+### 7.7.2 Gelman-Rubin $\hat{R}$ Statistic
+
+The $\hat{R}$ statistic compares the within-chain and between-chain variances across multiple chains:
+
+$$\hat{R} = \sqrt{\frac{\hat{V}}{W}},$$
+
+where $W$ is the within-chain variance and $\hat{V}$ is a pooled estimate combining within- and between-chain variance. Convergence is indicated when $\hat{R} < 1.01$ for all parameters. Chapter 12, Table 12.1 reports $\hat{R}$ values for all monitored parameters; all satisfy the $\hat{R} < 1.01$ threshold.
+
+### 7.7.3 Effective Sample Size (ESS)
+
+The ESS quantifies the number of independent samples equivalent to the correlated MCMC samples:
+
+$$\text{ESS} = \frac{N}{1 + 2 \sum_{t=1}^\infty \rho_t},$$
+
+where $\rho_t$ is the autocorrelation at lag $t$. Low ESS indicates high autocorrelation and poor mixing. The threshold $\text{ESS} > 400$ is required for reliable inference. All parameters meet this threshold (Chapter 12, Table 12.1).
+
+### 7.7.4 Geweke Diagnostic
+
+The Geweke diagnostic compares the means of the early and late portions of the chain:
+
+$$z = \frac{\bar{\theta}_A - \bar{\theta}_B}{\sqrt{\text{Var}(\bar{\theta}_A) + \text{Var}(\bar{\theta}_B)}},$$
+
+where $A$ is the first 10% of the chain and $B$ is the last 50%. Under convergence, $z \sim \mathcal{N}(0, 1)$. Values $|z| > 2$ indicate non-convergence. All Geweke z-scores fall within $[-2, 2]$ (Chapter 12, Table 12.1).
+
+### 7.7.5 Raftery-Lewis Diagnostic
+
+The Raftery-Lewis diagnostic computes the number of iterations required to estimate a specified quantile to a desired accuracy. For example, to estimate the 2.5th percentile to within ±0.005 with 95% confidence, the diagnostic returns the required chain length.
+
+## 7.8 Adaptive Concentration Parameters: ASUGS
+
+The Adaptive SUGS (ASUGS) algorithm (Tsiligkaridis & Forsythe, 2015) provides a low-complexity method for online adaptation of the concentration parameter $\gamma$ as new data arrives. This is particularly relevant for the FPL problem, where streaming data requires efficient online learning algorithms and the number of latent form states must adapt as player performance patterns evolve over the season.
+
+The ASUGS update for $\gamma$ at step $n$ is:
+
+$$\gamma_{n} = \gamma_{n-1} + \eta_n \cdot \left( \frac{\partial}{\partial \gamma} \log p(z_n \mid z_{1:n-1}, \gamma) \right),$$
+
+where $\eta_n$ is a step size schedule (e.g., $\eta_n = 1/n$). The gradient is:
+
+$$\frac{\partial}{\partial \gamma} \log p(z_n \mid z_{1:n-1}, \gamma) = \frac{1}{\gamma + n - 1} - \psi(\gamma + n - 1) + \psi(\gamma),$$
+
+where $\psi$ is the digamma function.
+
+This online update allows the model to adapt the number of clusters as new data arrives, without requiring a full re-run of the MCMC chain. In practice, the KL divergence between consecutive gameweek belief states, $\text{KL}(b_{t} \parallel b_{t-1})$, is monitored, and ASUGS adaptation is triggered when this exceeds a threshold. This drift detection mechanism is evaluated empirically in Chapter 12, Section 12.8, which plots $\text{KL}_{\text{pop}}(t)$ over the season and identifies gameweeks where retraining was triggered.
+
+## 7.9 From Posterior to Belief State
+
+### 7.9.1 The Belief-State Mapping
+
+The posterior samples produced by the MCMC methods in this chapter are not merely statistical summaries — they constitute the **belief-state representation** that the decision engines in Chapters 8 and 9 operate on directly. Formally, for each player $j$ at gameweek $t$, the belief state over latent form clusters is:
+
+$$b_j(t) = \left( P(z_{j,t} = 1 \mid x_{j,1:t}), \; P(z_{j,t} = 2 \mid x_{j,1:t}), \; \ldots, \; P(z_{j,t} = K \mid x_{j,1:t}) \right).$$
+
+For each MCMC sample $s \in \{1, \ldots, S\}$, the belief state is computed using the sampled cluster parameters $(\mu_k^{(s)}, \Sigma_k^{(s)})$ and transition matrices $\pi_k^{(s)}$. The collection $\{b_j^{(s)}(t)\}_{s=1}^S$ forms the **posterior distribution over belief states**, which fully captures the epistemic uncertainty about player $j$'s form at gameweek $t$.
+
+### 7.9.2 Belief-State MDP
+
+This belief-state formulation converts the FPL problem into a **belief-state Markov Decision Process (MDP)**, a standard transformation for POMDPs (Åström, 1965). In the belief-state MDP:
+
+- **State**: The belief vector $b_t = (b_1(t), \ldots, b_N(t))$ for all $N$ players in the registry, augmented with the manager's squad, budget, and chip availability.
+- **Action**: Transfers, lineup selection, captaincy choice, and chip deployment.
+- **Transition**: $P(b_{t+1} \mid b_t, a_t)$, induced by the HDP-HMM transition matrices and the Bayesian belief update upon observing new data.
+- **Reward**: $R(b_t, a_t) = \mathbb{E}_{s \sim b_t}[R(s, a_t)]$, the expected FPL points under the belief distribution.
+
+The key insight is that **the RL agents in Chapters 8 and 9 do not operate on point estimates** (e.g., the MAP cluster assignment $\arg\max_k b_j^{(k)}(t)$). Instead, they operate on the **full distribution** $\{b_j^{(s)}(t)\}_{s=1}^S$, enabling them to:
+
+1. **Hedge against uncertainty**: Thompson Sampling samples one belief state $\tilde{b}_j \sim \{b_j^{(s)}(t)\}_{s=1}^S$ and acts optimally with respect to it, naturally exploring when uncertainty is high.
+2. **Plan across plausible worlds**: MCTS (Chapter 9, Section 9.8) builds a search tree where each node branches over multiple sampled belief states, explicitly evaluating decisions across different form scenarios.
+3. **Learn robust value functions**: DDQN (Chapter 9, Section 9.5) takes the belief vector $b_j(t)$ as input to its state representation, learning to map distributional uncertainty into long-term value estimates.
+
+### 7.9.3 Empirical Evaluation of Belief-State Quality
+
+The quality of the belief states — their smoothness, entropy, and predictive power — directly determines the performance of all downstream decision engines. Chapter 12, Section 12.4 provides a detailed cluster interpretability analysis, including:
+
+- The number of active form clusters discovered per position group (GK, DEF, MID, FWD).
+- Cluster means and transition matrix heatmaps.
+- Example player trajectories plotting $z_{j,t}$ over gameweeks.
+
+Furthermore, **Ablation 1** in Chapter 12 (Section 12.5.1) directly compares the belief states produced by the iid HDP-GMM against the temporal HDP-HMM, evaluating prediction MAE, cluster stability, and belief state entropy. The hypothesis is that the HDP-HMM produces smoother, more predictive belief states due to its explicit modelling of form persistence.
+
+## 7.10 Summary
+
+This chapter has provided a comprehensive treatment of posterior inference for the HDP-GMM and HDP-HMM. Gibbs sampling with conjugate updates provides exact (asymptotic) posterior samples. NUTS via NumPyro handles non-conjugate models with automatic gradient computation and JIT acceleration. Numba accelerates loop-intensive Gibbs steps by 10–30x. Variational Inference offers a faster alternative for online updates. A suite of convergence diagnostics ensures reliable inference. The ASUGS algorithm enables online adaptation of concentration parameters.
+
+Most importantly, Section 7.9 has established that the MCMC posterior samples are not isolated statistical outputs — they are the **belief-state representation** that forms the mathematical input to all downstream decision engines. Thompson Sampling (Chapter 8) samples from these belief states to achieve natural exploration. MCTS (Chapter 9) plans across sampled belief states for multi-gameweek lookahead. DDQN (Chapter 9) learns to map belief-state uncertainty into long-term value estimates.
+
+The next chapter shows how these belief states drive Thompson Sampling decisions, the first step (Step A) in the three-stage planning hierarchy.
