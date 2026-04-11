@@ -50,31 +50,14 @@ from src.models.hdp_gmm import (
 # ---------------------------------------------------------------------------
 
 def hdp_hmm_model(
-    data: jnp.ndarray,
-    player_ids: jnp.ndarray,
-    player_gw_indices: jnp.ndarray,
-    num_players: int,
-    max_gameweek: int,
+    data: jnp.ndarray,    # (num_players, max_T, D)
+    actions: jnp.ndarray, # (num_players, max_T, A)
+    mask: jnp.ndarray,    # (num_players, max_T)
     truncation: int = DEFAULT_TRUNCATION,
 ) -> None:
-    """Hierarchical DP HMM with Gaussian-Wishart emissions.
-
-    Parameters
-    ----------
-    data : jnp.ndarray (N, D)
-        Standardised features, ordered by (player, gameweek).
-    player_ids : jnp.ndarray (N,)
-        Integer player ID for each observation.
-    player_gw_indices : jnp.ndarray (N,)
-        0-based gameweek index for each observation (used for transitions).
-    num_players : int
-        Number of unique players.
-    max_gameweek : int
-        Maximum number of gameweeks any single player has data for.
-    truncation : int
-        Upper bound on the number of hidden states.
-    """
-    N, D = data.shape
+    """Hierarchical DP HMM with Gaussian-Wishart emissions and 3D Sequence Masking."""
+    P, max_T, D = data.shape
+    A = actions.shape[2]
 
     mu_0 = NORMAL_WISHART_PRIOR["mu_0"]
     kappa_0 = NORMAL_WISHART_PRIOR["kappa_0"]
@@ -82,63 +65,76 @@ def hdp_hmm_model(
     wishart_scale = NORMAL_WISHART_PRIOR["wishart_scale"]
     V = wishart_scale * jnp.eye(D)
 
-    # -- Global DP -----------------------------------------------------------
+    # -- Global DP (Sticky HDP-HMM parameters) -------------------------------
     gamma = numpyro.sample("gamma", dist.Gamma(1.0, 1.0))
+    kappa = numpyro.sample("kappa", dist.Gamma(1.0, 1.0))
+
     with numpyro.plate("beta_plate", truncation - 1):
         beta_raw = numpyro.sample("beta_raw", dist.Beta(1.0, gamma))
+    beta = stick_breaking_weights(beta_raw)
 
-    # -- Player-specific DPs -------------------------------------------------
-    alpha = numpyro.sample("alpha", dist.Gamma(1.0, 1.0))
-    with numpyro.plate("player_plate", num_players):
-        with numpyro.plate("pi_plate", truncation - 1):
-            pi_raw = numpyro.sample("pi_raw", dist.Beta(1.0, alpha))
+    # -- Action-Conditioned Transition Matrices ------------------------------
+    with numpyro.plate("action_plates", A, dim=-3):
+        with numpyro.plate("trans_rows", truncation, dim=-2):
+            with numpyro.plate("trans_cols", truncation - 1, dim=-1):
+                trans_beta = numpyro.sample("trans_beta", dist.Beta(1.0, 1.0))
+            trans_probs = stick_breaking_weights(trans_beta) 
 
-    # -- Global transition matrix prior (shared via DP) ----------------------
-    # Each row of the transition matrix is drawn from a Dirichlet.
-    # The HDP shares rows across players.
-    with numpyro.plate("trans_rows", truncation):
-        with numpyro.plate("trans_cols", truncation - 1):
-            trans_beta = numpyro.sample("trans_beta", dist.Beta(1.0, 1.0))
-        trans_probs = stick_breaking_weights(trans_beta)  # (T, T)
-        # Normalize to ensure valid transition matrix
-        trans_probs = trans_probs / trans_probs.sum(axis=-1, keepdims=True)
-
-    # -- Gaussian-Wishart emission parameters --------------------------------
+    # -- Gaussian-Wishart Emission Parameters --------------------------------
     with numpyro.plate("components", truncation):
-        precision = numpyro.sample(
-            "precision",
-            dist.Wishart(df=wishart_df, scale_matrix=V),
-        )  # (T, D, D)
-
+        precision = numpyro.sample("precision", dist.Wishart(concentration=wishart_df, scale_matrix=V))
         cov_for_mean = jnp.linalg.inv(kappa_0 * precision)
         mu = numpyro.sample(
             "mu",
-            dist.MultivariateNormal(
-                loc=jnp.full(D, mu_0),
-                covariance_matrix=cov_for_mean,
-            ),
-        )  # (T, D)
+            dist.MultivariateNormal(loc=jnp.full(D, mu_0), covariance_matrix=cov_for_mean)
+        )
 
-    # -- HMM emission likelihood ---------------------------------------------
-    with numpyro.plate("data", N):
-        pid = player_ids[jnp.arange(N)]
-        gw = player_gw_indices[jnp.arange(N)]
+    # -- Trajectory Likelihood (Padded & Masked Forward Pass) ----------------
+    
+    def log_lik_player(p_data, p_actions, p_mask):
+        jax.debug.print("p_data: {s1}, p_actions: {s2}, trans_probs: {s3}", s1=p_data.shape, s2=p_actions.shape, s3=trans_probs.shape)
+        
+        # Emission log-probs for all states for this player
+        def compute_emissions(x):
+            def log_prob_k(k):
+                return dist.MultivariateNormal(loc=mu[k], precision_matrix=precision[k]).log_prob(x)
+            return jax.vmap(log_prob_k)(jnp.arange(truncation))
+            
+        log_e = jax.vmap(compute_emissions)(p_data) # (max_T, truncation)
 
-        # Player-specific state mixture weights (initial distribution)
-        w_init = stick_breaking_weights(pi_raw[pid])  # (N, T)
+        # Initial distribution
+        pi_0 = beta
+        
+        def scan_fn(alpha_prev, inputs):
+            log_e_t, action_t, mask_t = inputs
+            
+            # TRACING: This will print once during JAX compilation
+            # print(f"DEBUG TRACE: truncation={truncation}, A={action_t.shape}")
+            
+            # Action-conditioned transition: sum_a action_t[a] * trans_probs[a, t, k]
+            # We explicitly broadcast action_t to match trans_probs
+            # trans_probs shape is (A, T, T)
+            pi_t = (action_t.reshape(-1, 1, 1) * trans_probs).sum(axis=0)
+            
+            # Forward step in log space
+            alpha_raw = log_e_t + jax.scipy.special.logsumexp(alpha_prev[:, None] + jnp.log(pi_t + 1e-10), axis=0)
+            
+            # Apply mask: if masked out, stay at alpha_prev (or neutral)
+            alpha_t = jnp.where(mask_t > 0, alpha_raw, alpha_prev)
+            return alpha_t, alpha_t
 
-        # First observation: drawn from player's initial mixture
-        # (simplified — full HMM would use forward-filtering backward-sampling)
-        z = numpyro.sample("z", dist.CategoricalProbs(probs=w_init))
+        init_alpha = jnp.log(pi_0 + 1e-10) + log_e[0]
+        # We handle t=0 separately if needed, but here we assume max_T >= 1
+        _, alphas = jax.lax.scan(scan_fn, init_alpha, (log_e[1:], p_actions[:-1], p_mask[1:]))
+        
+        # Log-likelihood is the logsumexp of the final REAL (not padded) alpha
+        # We find the last index where mask == 1.0
+        final_alpha = jnp.where(p_mask.sum() == 1, init_alpha, alphas[-1])
+        return jax.scipy.special.logsumexp(final_alpha)
 
-        obs_mu = mu[z]
-        obs_precision = precision[z]
-        obs_cov = jnp.linalg.inv(obs_precision + 1e-6 * jnp.eye(D))
-
-        log_prob = dist.MultivariateNormal(
-            loc=obs_mu, covariance_matrix=obs_cov
-        ).log_prob(data)
-        numpyro.factor("obs_log_prob", log_prob)
+    # Vmap over the entire player batch (no dynamic slicing!)
+    total_log_lik_vector = jax.vmap(log_lik_player)(data, actions, mask)
+    numpyro.factor("trajectory_log_lik", jnp.sum(total_log_lik_vector))
 
 
 # ---------------------------------------------------------------------------
@@ -148,9 +144,7 @@ def hdp_hmm_model(
 def run_hdp_hmm(
     data: np.ndarray,
     player_ids: np.ndarray,
-    player_gw_indices: np.ndarray,
-    num_players: int,
-    max_gameweek: int,
+    actions: np.ndarray,
     *,
     num_warmup: int = 500,
     num_samples: int = 1000,
@@ -158,41 +152,28 @@ def run_hdp_hmm(
     truncation: int = DEFAULT_TRUNCATION,
     rng_key: int = 0,
 ) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
-    """Run MCMC inference for the HDP-HMM.
+    """Run MCMC inference for the upgraded HDP-HMM.
 
     Parameters
     ----------
     data : np.ndarray (N, D)
-        Standardised features.
+        Standardised features in tabular format.
     player_ids : np.ndarray (N,)
-        Integer player IDs.
-    player_gw_indices : np.ndarray (N,)
-        0-based gameweek index for temporal ordering.
-    num_players : int
-    max_gameweek : int
-    num_warmup : int
-    num_samples : int
-    num_chains : int
-    truncation : int
-    rng_key : int
-
-    Returns
-    -------
-    samples : dict[str, np.ndarray]
-    summary : dict[str, Any]
+    actions : np.ndarray (N, A)
+        Action vectors in tabular format.
     """
-    jax_data = jnp.array(data, dtype=jnp.float32)
-    jax_pids = jnp.array(player_ids, dtype=np.int32)
-    jax_gw = jnp.array(player_gw_indices, dtype=np.int32)
+    from src.utils.jax_helpers import prepare_hmm_sequences
+
+    # Reshape tabular data into 3D tensors for JAX-nativity
+    p_data, p_actions, p_mask = prepare_hmm_sequences(data, player_ids, actions)
+    
+    jax_data = jnp.array(p_data, dtype=jnp.float32)
+    jax_actions = jnp.array(p_actions, dtype=jnp.float32)
+    jax_mask = jnp.array(p_mask, dtype=jnp.float32)
 
     log.info(
-        "Running HDP-HMM (Gaussian-Wishart): N=%d, D=%d, players=%d, "
-        "max_gw=%d, T=%d",
-        len(jax_data),
-        jax_data.shape[1],
-        num_players,
-        max_gameweek,
-        truncation,
+        "Running upgraded HDP-HMM (3D Tensor): players=%d, T_max=%d, D=%d, A=%d",
+        jax_data.shape[0], jax_data.shape[1], jax_data.shape[2], jax_actions.shape[2]
     )
 
     kernel = NUTS(hdp_hmm_model)
@@ -208,10 +189,8 @@ def run_hdp_hmm(
     mcmc.run(
         rng,
         jax_data,
-        jax_pids,
-        jax_gw,
-        num_players,
-        max_gameweek,
+        jax_actions,
+        jax_mask,
         truncation=truncation,
     )
 
@@ -224,21 +203,27 @@ def run_hdp_hmm(
     )
     active_clusters = int((global_weights_mean > 0.05).sum())
 
+    # Average transition matrices across actions if necessary, or just report shape
+    # trans_beta has shape (S, A, T, T-1)
+    trans_beta_mean = samples["trans_beta"].mean(axis=0) # (A, T, T-1)
+    
+    # We can't easily use stick_breaking_weights on the whole thing if it's jnp vs np
+    # but for summary purposes, we'll just report the raw means and active count.
+    
     summary = {
         "gamma_mean": float(np.array(samples["gamma"].mean())),
-        "alpha_mean": float(np.array(samples["alpha"].mean())),
+        "kappa_mean": float(np.array(samples.get("kappa", 0.0).mean())),
         "active_clusters": active_clusters,
         "global_weights": global_weights_mean,
         "mu_means": np.array(samples["mu"].mean(axis=0)),            # (T, D)
         "precision_means": np.array(samples["precision"].mean(axis=0)),  # (T, D, D)
-        "trans_probs": np.array(samples["trans_probs"].mean(axis=0)),    # (T, T)
-        "trans_beta": np.array(samples.get("trans_beta", np.array([]))),
+        "trans_beta_mean": np.array(trans_beta_mean),               # (A, T, T-1)
     }
 
     log.info(
-        "Active states: %d | Transition matrix: %s",
+        "Active states: %d | Action-conditioned transition shape: %s",
         active_clusters,
-        summary["trans_probs"].shape,
+        summary["trans_beta_mean"].shape,
     )
 
     return samples, summary

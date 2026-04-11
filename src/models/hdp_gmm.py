@@ -131,16 +131,16 @@ def hdp_gmm_model(
             pi_raw = numpyro.sample("pi_raw", dist.Beta(1.0, alpha))
 
     # -- Gaussian-Wishart base measure (H) -----------------------------------
-    # Λ_k ~ Wishart(ν, V)          — full D×D precision matrix
-    # μ_k | Λ_k ~ N(μ₀, (κ₀ Λ_k)⁻¹) — mean conditioned on precision
+    # Lambda_k ~ Wishart(nu, V)          — full DxD precision matrix
+    # mu_k | Lambda_k ~ N(mu_0, (kappa_0 * Lambda_k)^-1) — mean conditioned on precision
     with numpyro.plate("components", truncation):
-        # Precision matrix Λ ~ Wishart(df, scale_matrix)
+        # Precision matrix Lambda ~ Wishart(concentration, scale_matrix)
         precision = numpyro.sample(
             "precision",
-            dist.Wishart(df=wishart_df, scale_matrix=V),
+            dist.Wishart(concentration=wishart_df, scale_matrix=V),
         )  # (T, D, D)
 
-        # Covariance for mean prior: (κ₀ Λ_k)⁻¹ = Λ_k⁻¹ / κ₀
+        # Covariance for mean prior: (kappa_0 * Lambda_k)^-1 = Lambda_k^-1 / kappa_0
         cov_for_mean = jnp.linalg.inv(kappa_0 * precision)  # (T, D, D)
 
         mu = numpyro.sample(
@@ -265,7 +265,7 @@ def run_hdp_gmm(
     }
 
     log.info(
-        "Active clusters (mass > 5%%): %d | μ shape %s, Λ shape %s",
+        "Active clusters (mass > 5%%): %d | mu shape %s, Lambda shape %s",
         active_clusters,
         mu_means.shape,
         precision_means.shape,

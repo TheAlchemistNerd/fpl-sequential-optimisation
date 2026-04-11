@@ -322,6 +322,30 @@ A "Creative Form" profile for a midfielder may exhibit:
 
 The Inverse-Wishart prior on $\Sigma_k$ regularises the covariance estimates, shrinking them towards the identity matrix when data is sparse. This prevents overfitting and ensures numerical stability.
 
+## 5.8 Advanced Representational Considerations: I²GMM
+
+While the standard HDP-GMM provides a robust non-parametric foundation, certain domains exhibit within-cluster multi-modality (e.g., "Elite" performance profiles that differ significantly between Home and Away fixtures). To capture these nested structures without over-fragmenting the global state space, the **Infinite Mixture of Infinite Gaussian Mixtures (I²GMM)** extension is considered.
+
+### 5.8.1 Nested Chinese Restaurant Process
+
+The I²GMM introduces a secondary layer of stick-breaking. Each global cluster $k$ is itself an infinite mixture of sub-clusters.
+
+```
+Algorithm: I²GMM Generative Process
+1. Draw global weights β ~ GEM(γ)
+2. For each global cluster k:
+    a. Draw sub-cluster weights π_k ~ GEM(α)
+    b. For each sub-cluster m:
+        i. Draw atoms θ_{k,m} ~ H (Gaussian-Wishart)
+
+3. For each observation i:
+    a. Sample global cluster z_i ~ Categorical(β)
+    b. Sample sub-cluster c_i ~ Categorical(π_{z_i})
+    c. Sample data x_i ~ N(θ_{z_i, c_i})
+```
+
+This nested hierarchy allows the agent to maintain a single "Elite" Belief State while internalizing the multi-modal variations that drive performance variance.
+
 ## 5.10 Summary
 
 This chapter has presented the HDP-GMM with Gaussian-Wishart base measure in full mathematical detail. The NIW prior provides conjugacy for efficient posterior updates. The truncated stick-breaking construction enables practical implementation. The I²GMM extension addresses within-cluster multi-modality. Alternative base measures (Poisson-Gamma, Negative-Binomial) handle discrete count data and over-dispersed points. The belief state output provides a rich, probabilistic representation of player form. The NumPyro implementation leverages JAX's acceleration for scalable inference.

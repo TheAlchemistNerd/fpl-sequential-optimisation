@@ -22,12 +22,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.linear_model import Ridge
 
 logger = logging.getLogger(__name__)
+
+# Constants for the 757-dimension strategic state vector (Step C)
+# Following Ch. 9 §9.5.3:
+#   Squad Config (binary N): ~720
+#   Active Beliefs (K): 30
+#   Budget (1), Chips (4), GW (1), FT (1)
+# Total is slightly dynamic depending on N, target is ~757.
+SQUAD_SIZE = 15
+DEFAULT_K = 30
 
 
 # ---------------------------------------------------------------------------
@@ -466,3 +477,62 @@ def get_high_uncertainty_players(
     ]
     candidates.sort(key=lambda bs: bs.entropy, reverse=True)
     return candidates[:top_k]
+# ---------------------------------------------------------------------------
+# Strategic State Assembly (Step C Bridge)
+# ---------------------------------------------------------------------------
+
+
+def compute_belief_vecs_jax(
+    z_samples: jnp.ndarray,
+    num_states: int = DEFAULT_K,
+) -> jnp.ndarray:
+    """
+    JAX-native computation of belief vectors from posterior samples.
+    
+    Parameters
+    ----------
+    z_samples : (S, N)
+        S samples of N observation cluster assignments.
+    """
+    S, N = z_samples.shape
+    # Count occurrences via bincount across samples for each observation
+    counts = jax.vmap(lambda x: jnp.bincount(x, length=num_states))(z_samples.T)
+    return counts / S
+
+
+def assemble_757_state(
+    squad_ids: list[int],
+    all_player_ids: list[int],
+    belief_vecs: dict[int, np.ndarray],
+    budget: float,
+    chips: dict[str, bool],
+    gameweek: int,
+    free_transfers: int,
+) -> jnp.ndarray:
+    """
+    Assembles the high-dimensional state vector for Step C (DDQN).
+    
+    Structure: [Squad Binary (N)] + [Squad Mean Belief (K)] + [Chips (4)] + [Meta (3)]
+    """
+    # 1. Squad Binary (N-vector)
+    squad_set = set(squad_ids)
+    squad_binary = jnp.array([1.0 if pid in squad_set else 0.0 for pid in all_player_ids])
+
+    # 2. Squad Beliefs (Mean profile of the 15-man squad)
+    # We aggregate the beliefs of the squad to provide a summary of the team's latent form
+    squad_belief_list = [jnp.array(belief_vecs.get(pid, jnp.zeros(DEFAULT_K))) for pid in squad_ids]
+    squad_beliefs = jnp.stack(squad_belief_list)
+    mean_squad_belief = jnp.mean(squad_beliefs, axis=0)  # (K,)
+
+    # 3. Chips and Meta
+    chip_vec = jnp.array([
+        1.0 if chips.get("wildcard", False) else 0.0,
+        1.0 if chips.get("bench_boost", False) else 0.0,
+        1.0 if chips.get("triple_captain", False) else 0.0,
+        1.0 if chips.get("free_hit", False) else 0.0,
+    ])
+    
+    meta = jnp.array([budget, float(gameweek), float(free_transfers)])
+
+    # Concatenate into full strategic state
+    return jnp.concatenate([squad_binary, mean_squad_belief, chip_vec, meta])

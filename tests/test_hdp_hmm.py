@@ -13,14 +13,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 @pytest.fixture
 def synthetic_hmm_data():
-    """Single player with 10 gameweeks, 2 features."""
+    """Single player with 10 gameweeks, 2 features, 2 discrete actions."""
     rng = np.random.default_rng(42)
     N = 10
     D = 2
+    A = 2
     data = rng.normal(0, 1, size=(N, D)).astype(np.float32)
     pids = np.zeros(N, dtype=np.int32)
     gw_idx = np.arange(N, dtype=np.int32)
-    return data, pids, gw_idx, 1, 10
+    # Binary 1-hot actions (e.g. [1,0] = No action, [0,1] = Transfer)
+    actions = np.zeros((N, A), dtype=np.float32)
+    actions[:, 0] = 1.0 # default to neutral action
+    return data, pids, gw_idx, actions, 1, 10
 
 
 class TestHDPHMMStructure:
@@ -29,7 +33,7 @@ class TestHDPHMMStructure:
     def test_model_has_transition_probs(self):
         """HDP-HMM must define transition probabilities between states."""
         from src.models import hdp_hmm
-        source = Path(hdp_hmm.__file__).read_text()
+        source = Path(hdp_hmm.__file__).read_text(encoding="utf-8")
         assert "trans" in source.lower(), (
             "HDP-HMM must define transition probabilities."
         )
@@ -37,7 +41,7 @@ class TestHDPHMMStructure:
     def test_model_has_gaussian_wishart_emissions(self):
         """Emissions must use Gaussian-Wishart (not diagonal approx)."""
         from src.models import hdp_hmm
-        source = Path(hdp_hmm.__file__).read_text()
+        source = Path(hdp_hmm.__file__).read_text(encoding="utf-8")
         assert "Wishart" in source, (
             "HDP-HMM emissions must use Wishart for full precision."
         )
@@ -58,10 +62,10 @@ class TestHDPHMMRun:
 
     def test_run_returns_summary(self, synthetic_hmm_data):
         from src.models.hdp_hmm import run_hdp_hmm
-        data, pids, gw, n_players, max_gw = synthetic_hmm_data
+        data, pids, gw, actions, n_players, max_gw = synthetic_hmm_data
 
         samples, summary = run_hdp_hmm(
-            data, pids, gw, n_players, max_gw,
+            data, pids, actions,
             num_warmup=100, num_samples=200, num_chains=1,
             truncation=8, rng_key=0,
         )
@@ -69,30 +73,32 @@ class TestHDPHMMRun:
         assert "active_clusters" in summary
         assert "mu_means" in summary
         assert "precision_means" in summary
-        assert "trans_probs" in summary
+        assert "trans_beta_mean" in summary
+        assert "kappa_mean" in summary
 
     def test_transition_matrix_shape(self, synthetic_hmm_data):
         from src.models.hdp_hmm import run_hdp_hmm
-        data, pids, gw, n_players, max_gw = synthetic_hmm_data
+        data, pids, gw, actions, n_players, max_gw = synthetic_hmm_data
 
         _, summary = run_hdp_hmm(
-            data, pids, gw, n_players, max_gw,
+            data, pids, actions,
             num_warmup=100, num_samples=200, num_chains=1,
             truncation=8, rng_key=0,
         )
 
         T = 8
-        tp = summary["trans_probs"]
-        assert tp.shape == (T, T), (
-            f"Transition matrix must be ({T}, {T}), got {tp.shape}"
+        A = 2
+        tb = summary["trans_beta_mean"]
+        assert tb.shape == (A, T, T-1), (
+            f"Transition beta mean must be ({A}, {T}, {T-1}), got {tb.shape}"
         )
 
     def test_precision_is_full_matrix(self, synthetic_hmm_data):
         from src.models.hdp_hmm import run_hdp_hmm
-        data, pids, gw, n_players, max_gw = synthetic_hmm_data
+        data, pids, gw, actions, n_players, max_gw = synthetic_hmm_data
 
         _, summary = run_hdp_hmm(
-            data, pids, gw, n_players, max_gw,
+            data, pids, actions,
             num_warmup=100, num_samples=200, num_chains=1,
             truncation=8, rng_key=0,
         )

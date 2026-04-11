@@ -199,27 +199,21 @@ The system leverages **JAX** and its **XLA (Accelerated Linear Algebra)** compil
 
 Unlike Numba, which operates as a separate JIT layer for Python, JAX is natively designed for high-performance array computing and automatic differentiation. The recursive state transitions in the HDP-HMM are implemented using `jax.lax.scan`, which compiles the temporal loop into a single, highly optimised XLA primitive.
 
-```python
+```
 Algorithm: JAX-Native FFBS Backward Sample
-Input: Filtered probabilities alpha[T, K], transition matrix pi[K, K]
+Input: Filtered probabilities α[T, K], transition matrix π[K, K]
 Output: Sampled state trajectory z[T]
 
-# Define the single-step backward transition
-def backward_step(current_state, alpha_t):
-    # Compute categorical probabilities: P(z_t | z_{t+1}, alpha_t)
-    probs = alpha_t * pi[:, current_state]
-    probs = probs / jnp.sum(probs)
-    
-    # Sample from categorical distribution
-    next_state = jax.random.categorical(rng, jnp.log(probs))
-    return next_state, next_state
+1. Precompute: Reverse filtered probabilities α̃ ← reverse(α)
+2. Initialise: z[T] ← sample from Categorical(α[T])
 
-# Compile the sequence into a single XLA primitive
-z_final, z_trajectory = jax.lax.scan(
-    backward_step, 
-    init_state=z_T, 
-    xs=alpha[:-1][::-1]
-)
+3. Recursion: For each timestep t from T-1 down to 1:
+    a. Compute conditional probabilities: 
+       P(z_t = k | z_{t+1}, α_t) ∝ α_t(k) · π(k, z_{t+1})
+    b. Normalise: P(z_t) ← P(z_t) / Σ_k P(z_t = k)
+    c. Sample: z[t] ← sample from Categorical(P(z_t))
+
+4. Return z
 ```
 
 By compiling this entire recursive procedure, JAX eliminates the Python loop overhead and allows the compiler to perform cross-operation optimisations, such as fusion of the categorical sampling and normalization kernels.
@@ -241,16 +235,18 @@ The speedup achieved via JAX/XLA JIT is comparable to C++ implementations:
 
 Multiple MCMC chains are run in parallel using JAX's `pmap` or `vmap` primitives, allowing the system to harness multi-core CPUs or massively parallel GPU architectures to assess convergence:
 
-```python
+```
 Algorithm: Massively Parallel MCMC Chains
 Input: Model specification, data X, number of chains C = 8
 Output: Samples from C independent chains
 
-# Map the inference function over multiple random seeds
-seeds = jax.random.split(master_rng, C)
-all_samples = jax.vmap(run_chain)(seeds, X)
+1. Initialise: Split random seed into C independent seeds {seed_1, ..., seed_C}
+2. Parallel Execute:
+    For each chain i from 1 to C (in parallel):
+        Run inference chain θ_i ← run_mcmc(seed_i, X)
 
-# XLA compiles this into a single parallel operation
+3. Synchronise: Collect results from all streams/GPU-cores {θ_1, ..., θ_C}
+4. Return concatenated samples
 ```
 
 This parallel execution is fundamental to the convergence diagnostics in Section 7.7, as it allows for the rapid generation of the multiple independent trajectories required for the Gelman-Rubin $\hat{R}$ calculation.
