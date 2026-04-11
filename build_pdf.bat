@@ -10,7 +10,9 @@ pandoc --lua-filter=mermaid.lua ^
        --bibliography=docs/references.bib ^
        -V geometry:margin=1in ^
        -V linkcolor:DodgerBlue ^
-       -V author="Nevil Maloba\\ \small GitHub: TheAlchemistNed \ \ nevillemaloba@gmail.com" ^
+       -V title="Optimal Sequential Decision Making in the Fantasy Premier League" ^
+       -V subtitle="A Unified Framework for Intertemporal Stochastic Optimal Control via Bayesian Nonparametrics and Deep Reinforcement Learning" ^
+       -V author="Nevil Maloba\\ \small GitHub: \href{https://github.com/TheAlchemistNerd}{TheAlchemistNerd} \ \ nevillemaloba@yahoo.com" ^
        --toc ^
        docs/chapter_00_abstract.md ^
        docs/chapter_01_introduction_problem_formulation.md ^
@@ -27,7 +29,7 @@ pandoc --lua-filter=mermaid.lua ^
        docs/chapter_12_experimental_results.md ^
        docs/chapter_13_conclusion.md ^
        docs/appendices.md ^
-       -o "Predicting FPL Using Sequential Optimisation.pdf"
+       -o "Optimal Sequential Decision Making in the Fantasy Premier League.pdf"
 
 if %ERRORLEVEL% equ 0 (
     echo [SUCCESS] PDF has been generated successfully.

@@ -7,6 +7,9 @@ Fetches data from the official Fantasy Premier League API endpoints:
 - element-summary/{EID}/: per-player historical data
 - event/{GW}/live/: live gameweek data
 - entry/{TID}/history/: manager history for benchmarking
+
+Per-90 and form computations delegate to the canonical implementations in
+``src.data.feature_engineering`` to avoid duplication.
 """
 
 import logging
@@ -15,6 +18,8 @@ from typing import Any
 
 import pandas as pd
 import requests
+
+from src.data.feature_engineering import per90 as compute_per90
 
 logger = logging.getLogger(__name__)
 
@@ -250,17 +255,12 @@ def get_entry_history(team_id: int) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Derived quantities from bootstrap data
+# Derived quantity helpers (delegates to canonical implementations)
 # ---------------------------------------------------------------------------
 
-
-def compute_per90(series: pd.Series, minutes: pd.Series) -> pd.Series:
-    """
-    Normalise a cumulative statistic to a per-90 rate.
-
-    S^{/90} = S / max(minutes, 1) * 90
-    """
-    return series / minutes.clip(lower=1) * 90
+# compute_per90 is re-exported from feature_engineering for backward compatibility:
+#   from src.data.fetcher import compute_per90
+#   compute_per90(series, minutes)  # → delegates to feature_engineering.per90
 
 
 def compute_form(points_series: pd.Series, window: int) -> pd.Series:
@@ -268,27 +268,8 @@ def compute_form(points_series: pd.Series, window: int) -> pd.Series:
     Compute rolling average form over *window* gameweeks.
 
     Form_p(w) = (1/w) * sum_{k=0}^{w-1} points_p(t - k)
+
+    Thin wrapper — the canonical implementation lives in
+    ``feature_engineering.build_form_features`` for DataFrame-level usage.
     """
     return points_series.rolling(window=window, min_periods=1).mean()
-
-
-def enrich_bootstrap_players(players_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add derived columns to the raw players DataFrame:
-        - per-90 rates for goals, assists, xG, xA, ICT components, etc.
-        - custom form windows (3, 5, 10)
-    """
-    mins = players_df["minutes"].astype(float)
-
-    # Per-90 metrics
-    for col in [
-        "goals_scored", "assists", "clean_sheets", "saves", "bonus", "bps",
-        "yellow_cards", "red_cards",
-        "expected_goals", "expected_assists", "expected_goal_involvements",
-        "expected_goals_conceded",
-        "influence", "creativity", "threat",
-    ]:
-        if col in players_df.columns:
-            players_df[f"{col}_per_90"] = compute_per90(players_df[col].astype(float), mins)
-
-    return players_df

@@ -26,6 +26,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.api.data_fetcher import fetch_all_data
 from src.config.settings import settings
+from src.data.feature_engineering import (
+    build_core_features,
+    build_advanced_features,
+    build_ict_features,
+    build_form_features,
+    assemble_feature_matrix,
+)
 
 log = logging.getLogger(__name__)
 
@@ -58,6 +65,9 @@ def run_pipeline(latest_gameweek: int) -> None:
 def engineer_features() -> pd.DataFrame:
     """Load raw CSVs and produce the feature matrix for modelling.
 
+    Delegates to ``src.data.feature_engineering`` for canonical per-90,
+    form, ICT, and advanced feature computation.
+
     Returns
     -------
     pd.DataFrame
@@ -79,18 +89,35 @@ def engineer_features() -> pd.DataFrame:
 
     # Merge player metadata
     players_df["full_name"] = players_df["first_name"] + " " + players_df["second_name"]
-    merged = pd.merge(gw_df, players_df[["id", "full_name", "element_type", "team"]], on="id", how="left")
+    merged = pd.merge(
+        gw_df,
+        players_df[["id", "full_name", "element_type", "team"]],
+        on="id",
+        how="left",
+    )
 
-    # Rolling averages (form)
-    for col in ["total_points", "minutes", "goals_scored", "assists"]:
-        if col in merged.columns:
-            merged[f"{col}_roll_3"] = (
-                merged.groupby("id")[col]
-                .transform(lambda s: s.rolling(3, min_periods=1).mean())
-            )
+    # Map element_type to position
+    position_map = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
+    merged["position"] = merged["element_type"].map(position_map)
 
-    log.info("  → %d rows, %d columns", len(merged), merged.shape[1])
-    return merged
+    # Rename 'id' to 'player_id' for feature engineering compatibility
+    if "id" in merged.columns and "player_id" not in merged.columns:
+        merged = merged.rename(columns={"id": "player_id"})
+
+    # Ensure 'gameweek' column exists
+    if "gameweek" not in merged.columns:
+        merged["gameweek"] = 1  # fallback
+
+    # Apply canonical feature engineering pipeline
+    merged = build_core_features(merged)
+    merged = build_advanced_features(merged)
+    merged = build_ict_features(merged)
+    merged = build_form_features(merged)
+
+    # Assemble final feature matrix
+    X, feature_names = assemble_feature_matrix(merged)
+    log.info("  → %d rows, %d engineered features", len(X), len(feature_names))
+    return X
 
 
 def update_hdp_models(features: pd.DataFrame) -> None:

@@ -40,10 +40,6 @@ FPL_ENTRY_TRANSFERS_URL = f"{settings.FPL_BASE_URL}entry/{{tid}}/transfers/"
 FPL_ENTRY_PICKS_URL = f"{settings.FPL_BASE_URL}entry/{{tid}}/event/{{gw}}/picks/"
 FPL_ENTRY_LEAGUES_URL = f"{settings.FPL_BASE_URL}entry/{{tid}}/leagues/"
 
-# Understat (unchanged from original)
-UNDERSTAT_BASE_URL = "https://understat.com/"
-UNDERSTAT_LEAGUE_URL = "https://understat.com/league/{}/{}"
-
 
 # ---------------------------------------------------------------------------
 # Retry / rate-limit helpers

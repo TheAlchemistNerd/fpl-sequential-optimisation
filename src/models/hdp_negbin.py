@@ -28,11 +28,9 @@ import numpyro
 import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
 
-from src.models.hdp_gmm import stick_breaking_weights
+from src.models.hdp_gmm import stick_breaking_weights, DEFAULT_TRUNCATION
 
 log = logging.getLogger(__name__)
-
-DEFAULT_TRUNCATION = 30
 
 NB_PRIOR = {
     "a_0": 2.0,  # Beta prior on p (success prob)

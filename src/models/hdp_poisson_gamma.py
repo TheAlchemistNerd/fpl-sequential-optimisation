@@ -25,11 +25,9 @@ import numpyro
 import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
 
-from src.models.hdp_gmm import stick_breaking_weights
+from src.models.hdp_gmm import stick_breaking_weights, DEFAULT_TRUNCATION
 
 log = logging.getLogger(__name__)
-
-DEFAULT_TRUNCATION = 30
 
 # Gamma prior hyper-parameters: Gamma(alpha_0, beta_0)
 GAMMA_PRIOR = {"alpha_0": 1.0, "beta_0": 1.0}

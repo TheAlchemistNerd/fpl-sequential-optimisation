@@ -64,7 +64,12 @@ def impute_missing_values(
             )
             # If entire position group is NaN, fall back to global median
             if df[col].isna().any():
-                df[col] = df[col].fillna(df[col].median())
+                global_median = df[col].median()
+                if not np.isnan(global_median):
+                    df[col] = df[col].fillna(global_median)
+                else:
+                    # All values are NaN, fill with 0
+                    df[col] = df[col].fillna(0.0)
 
     # 3. Sentiment defaults
     if "Sentiment" in df.columns:

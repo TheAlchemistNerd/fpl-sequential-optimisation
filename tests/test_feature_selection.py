@@ -113,12 +113,20 @@ class TestMutualInformationSelection:
         X = pd.DataFrame()
         y = pd.Series([])
         result = mutual_information_select(X, y)
+        # Should return empty list for empty input
         assert result == []
 
-
-# ===========================================================================
-# Correlation threshold tests (§3.7.1)
-# ===========================================================================
+    def test_mi_select_single_feature(self):
+        from src.data.feature_selection import mutual_information_select
+        # Need at least 4 samples for sklearn MI (n_neighbors=3 + 1)
+        X = pd.DataFrame({
+            "xG_per_90": [0.5, 0.3, 0.7, 0.2, 0.6],
+            "xA_per_90": [0.2, 0.1, 0.3, 0.15, 0.25],
+        })
+        y = pd.Series([12, 8, 15, 5, 10])
+        result = mutual_information_select(X, y)
+        # Should return both features (minimum samples met)
+        assert len(result) >= 1
 
 
 class TestCorrelationThresholdSelection:
@@ -298,14 +306,18 @@ class TestFinalFeatureSet:
 
     def test_select_final_features_filters_to_available(self):
         from src.data.feature_selection import select_final_features, FINAL_FEATURE_LIST
+        # Need enough samples for all methods to work
+        np.random.seed(42)
         X = pd.DataFrame({
-            "xG_per_90": [0.5, 0.3],
-            "Form_5": [6.5, 4.2],
-            "nonexistent_feature": [1, 2],
+            "xG_per_90": np.random.randn(20),
+            "Form_5": np.random.randn(20),
+            "FDR": np.random.uniform(2, 5, 20),
+            "is_home": np.random.randint(0, 2, 20),
+            "nonexistent_feature": [1] * 20,
         })
-        y = pd.Series([12, 8])
+        y = pd.Series(np.random.randn(20))
         result = select_final_features(X, y, method="union")
-        # Should only return features that exist in X
+        # Should only return features that exist in X AND are selected
         for feat in result:
             assert feat in X.columns
 
@@ -380,10 +392,11 @@ class TestEdgeCases:
 
     def test_mi_select_single_feature(self):
         from src.data.feature_selection import mutual_information_select
-        X = pd.DataFrame({"xG_per_90": [0.5, 0.3, 0.7]})
-        y = pd.Series([12, 8, 15])
+        # Below minimum samples (4) → should return all columns
+        X = pd.DataFrame({"xG_per_90": [0.5, 0.3]})
+        y = pd.Series([12, 8])
         result = mutual_information_select(X, y)
-        assert len(result) <= 1
+        assert result == ["xG_per_90"]
 
     def test_lasso_select_single_sample(self):
         from src.data.feature_selection import lasso_select

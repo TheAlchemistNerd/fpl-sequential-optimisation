@@ -25,9 +25,16 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _per90(series: pd.Series, minutes: pd.Series) -> pd.Series:
-    """S^{/90} = S / max(minutes, 1) * 90"""
+def per90(series: pd.Series, minutes: pd.Series) -> pd.Series:
+    """S^{/90} = S / max(minutes, 1) * 90
+
+    Canonical per-90 normalisation — all modules should import from here.
+    """
     return series / minutes.clip(lower=1) * 90.0
+
+
+# Backward-compatible alias (private name kept for internal use)
+_per90 = per90
 
 
 # ---------------------------------------------------------------------------

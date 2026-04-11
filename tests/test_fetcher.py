@@ -672,42 +672,35 @@ class TestFormCalculation:
 
 
 class TestEnrichBootstrapPlayers:
-    """Validate player enrichment with derived columns."""
+    """Validate player enrichment delegates to feature_engineering.
 
-    def test_enrich_adds_per90_columns(self):
-        from src.data.fetcher import enrich_bootstrap_players
-        df = pd.DataFrame({
-            "minutes": [1800, 900],
-            "goals_scored": [18, 5],
-            "assists": [10, 3],
-            "expected_goals": [15.5, 4.2],
-            "influence": [800.0, 400.0],
-        })
-        result = enrich_bootstrap_players(df)
-        assert "goals_scored_per_90" in result.columns
-        assert "assists_per_90" in result.columns
-        assert "expected_goals_per_90" in result.columns
-        assert "influence_per_90" in result.columns
+    Note: enrich_bootstrap_players was removed from fetcher.py to avoid
+    duplication.  The canonical implementations are:
+        - feature_engineering.build_core_features()
+        - feature_engineering.build_advanced_features()
+        - feature_engineering.build_ict_features()
+    compute_per90 is re-exported from feature_engineering for backward compat.
+    """
 
-    def test_enrich_per90_values_correct(self):
-        from src.data.fetcher import enrich_bootstrap_players
-        df = pd.DataFrame({
-            "minutes": [90],
-            "goals_scored": [1],
-        })
-        result = enrich_bootstrap_players(df)
-        # 1 goal in 90 minutes = 1.0 per 90
-        assert result["goals_scored_per_90"].iloc[0] == pytest.approx(1.0)
+    def test_compute_per90_delegates_to_feature_engineering(self):
+        from src.data.fetcher import compute_per90
+        from src.data.feature_engineering import per90
+        # Should be the same function
+        assert compute_per90 is per90
 
-    def test_enrich_handles_missing_columns(self):
-        from src.data.fetcher import enrich_bootstrap_players
-        df = pd.DataFrame({
-            "minutes": [1800],
-            # Missing most optional columns
-        })
-        result = enrich_bootstrap_players(df)
-        # Should not raise, just won't add per-90 cols
-        assert isinstance(result, pd.DataFrame)
+    def test_compute_per90_values_correct(self):
+        from src.data.fetcher import compute_per90
+        series = pd.Series([1], dtype=float)
+        minutes = pd.Series([90], dtype=float)
+        result = compute_per90(series, minutes)
+        assert result.tolist() == pytest.approx([1.0])
+
+    def test_compute_form_still_available_in_fetcher(self):
+        from src.data.fetcher import compute_form
+        points = pd.Series([10, 5, 8])
+        result = compute_form(points, window=2)
+        expected = [10.0, 7.5, 6.5]
+        assert result.tolist() == pytest.approx(expected)
 
 
 # ===========================================================================

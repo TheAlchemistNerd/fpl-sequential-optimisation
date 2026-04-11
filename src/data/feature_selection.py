@@ -33,6 +33,14 @@ def mutual_information_select(
 
     MI(X; Y) = sum_{x,y} P(x,y) log(P(x,y) / (P(x) P(y)))
     """
+    if X.empty or len(X) < 4:
+        logger.warning(
+            "Mutual information selection requires at least 4 samples "
+            "(sklearn n_neighbors=3 + 1); returning all columns. Got %d samples.",
+            len(X),
+        )
+        return X.columns.tolist()
+
     mi_scores = mutual_info_regression(X.values, y.values, random_state=42)
     mi_series = pd.Series(mi_scores, index=X.columns).sort_values(ascending=False)
 
@@ -94,6 +102,13 @@ def lasso_select(
     Features with β^{(d)} = 0 are eliminated.
     λ is tuned via cross-validation.
     """
+    if len(X) < cv:
+        logger.warning(
+            "Lasso CV requires at least cv=%d samples; reducing cv to %d.",
+            cv, len(X),
+        )
+        cv = max(2, len(X))
+
     lasso = LassoCV(cv=cv, random_state=42, max_iter=10000)
     lasso.fit(X.values, y.values)
 
@@ -188,6 +203,10 @@ def select_final_features(
     -------
     List of selected feature names that exist in X.
     """
+    if X.empty or len(y) == 0:
+        logger.warning("Empty input for select_final_features; returning empty list.")
+        return []
+
     available = [c for c in FINAL_FEATURE_LIST if c in X.columns]
     # Also consider all available numeric columns as candidates
     all_candidates = [c for c in X.select_dtypes(include=[np.number]).columns if c not in ["player_id", "gameweek"]]
