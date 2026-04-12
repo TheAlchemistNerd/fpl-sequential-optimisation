@@ -7,10 +7,11 @@ for DDQN training. Breaks correlation between consecutive samples.
 
 from __future__ import annotations
 
-import random
 from collections import deque
 from dataclasses import dataclass
 from typing import Any
+
+import numpy as np
 
 
 @dataclass
@@ -64,7 +65,8 @@ class ReplayBuffer:
             raise ValueError(
                 f"Cannot sample {batch_size} transitions from buffer of size {len(self.buffer)}"
             )
-        return random.sample(self.buffer, batch_size)
+        indices = np.random.choice(len(self.buffer), batch_size, replace=False)
+        return [self.buffer[i] for i in indices]
 
     def __len__(self) -> int:
         return len(self.buffer)

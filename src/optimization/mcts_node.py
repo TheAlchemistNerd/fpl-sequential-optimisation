@@ -8,7 +8,7 @@ Edges represent transfer actions.
 
 from __future__ import annotations
 
-import math
+import numpy as np
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -76,8 +76,8 @@ class MCTSNode:
             return float("inf")
 
         exploitation = self.total_reward / self.visit_count
-        exploration = exploration_weight * math.sqrt(
-            math.log(self.parent.visit_count) / self.visit_count
+        exploration = exploration_weight * np.sqrt(
+            np.log(self.parent.visit_count) / self.visit_count
         )
         return exploitation + exploration
 

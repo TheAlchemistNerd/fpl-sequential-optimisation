@@ -538,3 +538,57 @@ This chapter has developed the DDQN approach to FPL sequential decision-making a
 Together with Thompson Sampling (Step A, Chapter 8) and TS+MCTS (Step B, Chapter 8, Section 8.8), the DDQN completes a three-stage planning hierarchy that progresses seamlessly from Bayesian posterior inference (Chapter 7) through myopic optimisation, explicit multi-gameweek lookahead, and learned long-horizon value approximation — forming a cohesive masterclass in solving POMDPs in highly stochastic environments.
 
 The next chapter addresses the constrained optimisation layer — the knapsack problem, MILP formulations, and the Contextual MAB for captaincy selection.
+
+## 9.13 Production Implementation Notes
+
+This section documents how the theoretical DDQN and MaxEnt RL framework described above is realised in the production codebase (`src/optimization/ddqn/`), including architecture decisions, framework choices, and engineering refinements.
+
+### 9.13.1 Hybrid JAX + PyTorch Architecture
+
+The production implementation uses a **hybrid framework** that leverages the distinct strengths of JAX and PyTorch:
+
+| Component | Framework | Rationale |
+|---|---|---|
+| **HDP Models** (GMM, HMM, NegBin) | NumPyro on JAX/XLA | NUTS inference, automatic differentiation, GPU/TPU support for posterior sampling. |
+| **JAX Kernels** (MVN, Wishart, NIW, FFBS) | Pure JAX (`jax.jit`, `jax.vmap`, `jax.lax.scan`) | XLA-compiled conjugate computations; hardware portability without framework switching overhead. |
+| **DDQN Q-Network** | PyTorch (`torch.nn.Module`, `torch.optim.Adam`) | Rich RL ecosystem, intuitive neural network APIs, gradient clipping, target network management. |
+| **MILP Solver** | PuLP (CBC backend) | Open-source, mature constraint solver; handles discrete transfer costs exactly. |
+
+The boundary between frameworks is **clean and one-way**: HDP outputs are NumPy arrays (belief states) that feed into the DDQN as `numpy → torch.Tensor` conversions. No computational graph crosses the boundary—gradients flow only within PyTorch, and inference runs only within JAX. While a pure-Flax implementation was considered, PyTorch offers superior tooling for Deep RL (e.g., `torch.nn.utils.clip_grad_norm_`, standard `Adam` optimisers), making it the pragmatic choice for Step C.
+
+### 9.13.2 Q-Network Architecture Refinements
+
+The Q-network follows the architecture described in Section 9.7 with two key engineering refinements:
+
+1. **LayerNorm Placement**: LayerNorm is applied *after* ReLU activation (`Linear → ReLU → LayerNorm → Dropout`). This ordering stabilises training for the heterogeneous 757-dimensional input, which mixes binary squad encodings (0/1), continuous belief vectors (probabilities), and integer metadata (budget, gameweek).
+
+2. **Target Network Updates**: The implementation supports both **hard updates** (copying weights every $C$ steps) and **soft updates** (exponential moving average with $\tau=0.001$). In practice, soft updates are applied every training step to ensure smooth convergence, while hard updates serve as a safety net every 1,000 steps.
+
+### 9.13.3 Boltzmann Policy and Numerical Stability
+
+The Boltzmann policy (Section 9.8) is implemented with **numerically stable LogSumExp** to prevent overflow/underflow when Q-values are large:
+
+$$\pi(a \mid s) = \frac{\exp((Q(s, a) - Q_{\max}) / \tau)}{\sum_{a'} \exp((Q(s, a') - Q_{\max}) / \tau)},$$
+
+where $Q_{\max} = \max_{a'} Q(s, a')$. The temperature $\tau$ is annealed linearly over the season: $\tau_t = 2.0 \cdot (1 - t/38) + 0.1 \cdot (t/38)$. This ensures broad exploration in early gameweeks (when belief states are uncertain) and focused exploitation in late gameweeks (when form assessments are reliable).
+
+### 9.13.4 DDQN Training Loop
+
+The training loop implements the **decoupled action selection and evaluation** described in Section 9.6.2:
+
+$$a^* = \arg\max_{a'} Q_{\text{online}}(s', a'; \theta) \quad \text{(online selects)}$$
+$$y = r + \gamma \cdot Q_{\text{target}}(s', a^*; \theta') \cdot (1 - \text{done}) \quad \text{(target evaluates)}$$
+
+Additional production refinements:
+*   **Huber Loss (SmoothL1Loss)** replaces MSE for robustness to outlier rewards (e.g., unexpected double-gameweek hauls).
+*   **Gradient Clipping** at $\|\nabla\|_2 \leq 10.0$ prevents training instability during early exploration phases.
+*   **Minimum Buffer Size**: Training only begins after 1,000 transitions are collected, ensuring the initial updates are not based on noise.
+
+### 9.13.5 FPL Environment with FFBS Belief Updates
+
+The `FPLEnvironment` class provides a **gym-like interface** where state transitions are driven by:
+1.  **NB Posterior Predictive**: Point sampling per player per gameweek using Negative-Binomial distributions parameterised by belief-state expectations.
+2.  **Transition Matrix Multiplication**: Belief state updates via $b_{t+1} = b_t \cdot \pi$, where $\pi$ is the HDP-HMM transition matrix.
+3.  **757-Dimensional State Assembly**: Constructed via `assemble_757_state()` from `belief_state.py`, combining squad encoding, aggregated beliefs, chip availability, and budget metadata.
+
+The environment simulates a full 38-gameweek season per episode, with transfer costs deducted from rewards and chip availability tracked as boolean flags.
