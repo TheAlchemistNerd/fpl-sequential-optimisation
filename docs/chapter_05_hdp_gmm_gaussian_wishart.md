@@ -364,38 +364,19 @@ The collapsed Gibbs sampler described in Section 5.4 exploits the NIW-Gaussian c
 
 The NUTS approach is preferred for the **initial model development** because it requires no manual derivation of full conditionals and automatically handles the truncated stick-breaking construction. The collapsed Gibbs sampler remains available as a **JAX-accelerated kernel library** (`src/utils/jax_kernels.py`) for scenarios where conjugacy provides a significant speedup or where discrete assignments must be explicitly sampled.
 
-### 5.9.2 JAX/XLA Conjugate Kernel Library
+### 5.9.2 JAX/XLA Accelerated Conjugate Kernels
 
-The project includes a standalone library of JIT-compiled inference kernels that implement the conjugate computations described in Sections 5.3–5.4. These kernels are hardware-agnostic (CPU/GPU/TPU) via JAX's XLA compiler:
+While the theoretical derivation in Section 5.4 presents the Gibbs sampler as a loop over observations, the production implementation (`src/utils/jax_kernels.py`) leverages **JAX/XLA** to compile these updates into efficient, hardware-agnostic kernels. This replaces the Numba-accelerated approach originally envisaged, providing native GPU/TPU support.
 
-1. **MVN log-density**: JIT-compiled multivariate normal log-likelihood, replacing the imperative loop-over-observations with `jax.vmap`.
-2. **Inverse-Wishart sampling**: Bartlett decomposition for sampling from the precision matrix prior, replacing the Numba-accelerated Cholesky approach.
-3. **NIW posterior update**: Closed-form conjugate update of $(m_k, \kappa_k, \Psi_k, \nu_k)$ in JAX, producing identical results to the NumPy/SciPy formulae but with hardware acceleration.
-4. **NIW sampling**: Joint $(\mu_k, \Sigma_k)$ sampling from the NIW posterior, chaining Inverse-Wishart and conditional Gaussian draws.
-5. **Batched categorical sampling**: JIT-compiled categorical draws for cluster assignment updates.
+The library provides the following JIT-compiled kernels:
 
-These kernels are **not FPL-specific** and are designed for extraction into a standalone Bayesian inference package. Profiling tests (`tests/test_jax_profiling.py`) verify numerical equivalence with SciPy reference implementations and benchmark computational efficiency.
+1.  **MVN Log-Density**: `mvn_log_density(x, mean, precision)` computes the multivariate normal log-likelihood for all clusters simultaneously using `jax.vmap`. This eliminates the Python interpreter overhead of the Mahalanobis distance loop.
+2.  **Bartlett Decomposition**: The Wishart sampling for the precision matrix is implemented via the Bartlett decomposition, which generates lower-triangular matrices with $\chi^2$ diagonals. This is numerically stable and fully differentiable, replacing the less stable Cholesky-based approaches.
+3.  **Vectorised NIW Updates**: The sufficient statistics ($n_k, \bar{x}_k, S_k$) are computed using `jax.vmap` across all clusters simultaneously. This allows the posterior updates to be computed in parallel rather than sequentially.
+4.  **Parallel I²GMM Assignment**: The nested CRP assignment for the I²GMM extension (§5.5) uses `jax.vmap` to parallelise the sampling of sub-component assignments across all players.
 
-### 5.9.3 I²GMM Kernel Status
-
-The nested CRP assignment kernel for the I²GMM extension (§5.5) is implemented as a JIT-compiled function in the JAX kernel library. It uses `jax.vmap` to parallelise sub-component assignment sampling across observations within a top-level cluster. However, the **full two-level hierarchical model is not yet wired** into the main HDP-GMM model specification. The kernel exists as a standalone utility, ready for integration when the within-cluster multi-modality analysis (Chapter 12, Ablation studies) requires it.
-
-### 5.9.4 The 757-Dimensional Belief-State MDP Bridge
-
-Section 5.7 described the belief state as a probability distribution over latent form clusters. In the production system, this belief state is assembled into a **757-dimensional state vector** that serves as the input to the downstream decision engines (Thompson Sampling, MCTS, DDQN). The assembly follows the structure described in Chapter 9 (§9.5.3):
-
-| Component | Dimension | Source |
-|---|---|---|
-| Squad binary encoding | $N \approx 720$ | FPL registry |
-| Mean squad belief | $K = 30$ | HDP-HMM posterior |
-| Chip availability | 4 | Manager state |
-| Budget, gameweek, free transfers | 3 | Manager state |
-| **Total** | **~757** | |
-
-The belief vector for each player is computed as the empirical frequency of MCMC cluster assignments: $b_j^{(k)}(t) = \frac{1}{S} \sum_{s=1}^S \mathbb{I}(z_{j,t}^{(s)} = k)$. The JAX-native implementation (`compute_belief_vecs_jax`) uses `jax.vmap` and `jax.lax.scan` for efficient batched computation across all players and gameweeks.
-
-## 5.10 Summary
+These kernels allow the conjugate steps to run on GPU/TPU, significantly reducing inference time for large player registries ($N > 10{,}000$). Profiling benchmarks comparing these conjugate kernels to NUTS are available in `tests/test_jax_profiling.py`.
 
 This chapter has presented the HDP-GMM with Gaussian-Wishart base measure in full mathematical detail. The NIW prior provides conjugacy for efficient posterior updates. The truncated stick-breaking construction enables practical implementation. The I²GMM extension addresses within-cluster multi-modality. Alternative base measures (Poisson-Gamma, Negative-Binomial) handle discrete count data and over-dispersed points. The belief state output provides a rich, probabilistic representation of player form. The NumPyro implementation leverages JAX's acceleration for scalable inference.
 
-The next chapter extends the HDP-GMM with a Hidden Markov Model layer, capturing the temporal dynamics of player form — not just which state a player is in, but how they transition between states over gameweeks.
+The next chapter extends the HDP-GMM with a Hidden Markov Model layer, capturing the temporal dynamics of player form — not just which state a player is in, but how they transition between states over gameweeks.S

@@ -358,15 +358,25 @@ where $k = |S_{\text{new}} \setminus S_{\text{old}}|$ is the number of transfers
 
 ### 10.9.2 MILP Encoding
 
-The transfer cost is a piecewise linear function, which can be encoded in the MILP using an auxiliary variable:
+The transfer cost is a piecewise linear function, which can be encoded in the MILP using auxiliary variables.
 
-$$\text{cost} \geq 0, \quad \text{cost} \geq 4 \cdot (k - f).$$
+To handle the non-linearity of the cost function (0 points for transfers $\leq f$, and 4 points per transfer thereafter), we introduce auxiliary binary variables. Specifically, for each player $i$ in the potential squad, we define a binary variable $t_i$ indicating whether the player's membership has changed:
+
+$$t_i \geq x_i - x_i^{\text{prev}}, \quad t_i \geq x_i^{\text{prev}} - x_i, \quad t_i \in \{0, 1\},$$
+
+where $x_i$ is the new squad selection variable and $x_i^{\text{prev}}$ is the indicator of the player's presence in the previous squad. Since $x_i, x_i^{\text{prev}} \in \{0, 1\}$, these constraints ensure that $t_i = |x_i - x_i^{\text{prev}}|$, i.e., $t_i = 1$ if and only if the player's squad membership has changed.
+
+The total number of transfers is then $k = \frac{1}{2} \sum_{i} t_i$. The transfer cost is modelled as an auxiliary variable $C$ constrained by:
+
+$$C \geq 0, \quad C \geq 4 \cdot (k - f).$$
 
 The objective then becomes:
 
-$$\max \; \sum_{i \in S_{\text{new}}} v_i \cdot s_i + v_c \cdot c_c - \text{cost}.$$
+$$\max \; \sum_{i \in S_{\text{new}}} v_i \cdot s_i + v_c \cdot c_c - C.$$
 
-## 10.10 Chip Deployment Optimisation
+This encoding correctly handles the discontinuity at $k = f$ (zero cost for transfers within the free allowance, 4 points per transfer beyond) and allows the solver to optimise the trade-off between immediate squad improvement and future point penalties.
+
+### 10.10 Chip Deployment Optimisation
 
 ### 10.10.1 Chip Effects
 

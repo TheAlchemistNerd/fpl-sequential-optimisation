@@ -250,7 +250,15 @@ While pure Thompson Sampling (Step A, Sections 8.2–8.7) provides an elegant Ba
 
 Coupling Thompson Sampling with **Monte Carlo Tree Search (MCTS)** creates **Step B** in the planning hierarchy. This approach, conceptually aligned with algorithms like D2NG-POMCP (Partially Observable Monte Carlo Planning), enables explicit multi-gameweek scenario planning by simulating transfer sequences over a finite horizon and evaluating their cumulative consequences.
 
-### 8.8.1 The TS+MCTS Algorithm
+### 8.8.1 Belief-State Pruning
+
+A critical challenge in applying MCTS to FPL is the combinatorially large action space (~8,775 possible single transfers). To make the search tractable, the implementation employs **Belief-State Pruning**:
+
+1.  **Candidate Selection**: Instead of considering all players, the action space is restricted to the **top-K candidates** (e.g., $K=100$) ranked by expected points derived from their belief states.
+2.  **Action Encoding**: The MCTS tree expands only these candidate transfer actions. This reduces the branching factor $b$ from $\approx 720 \times 15$ to $\approx 100 \times 15$, making the $O(b^d)$ search feasible for depths $d \in [3, 5]$.
+3.  **Transfer Cost Penalisation**: The rollout rewards are penalised by the actual transfer costs (4 points per hit), ensuring the search prefers minimal changes unless the expected gain is substantial.
+
+### 8.8.2 The TS+MCTS Algorithm
 
 The TS+MCTS algorithm proceeds in four stages:
 
