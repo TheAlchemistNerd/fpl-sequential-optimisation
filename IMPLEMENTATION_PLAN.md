@@ -1,197 +1,165 @@
 # Implementation Plan — FPL Sequential Optimisation System
 
-> **Status:** Active development. Last updated: April 2026.
-> **Scope:** From current state (data pipeline + HDP models partially implemented) to full
-> production-ready system with decision engines, MILP optimiser, and MLOps pipeline.
+> **Status:** Active development. Last updated: 12 April 2026.  
+> **Source code:** 31 files, 5,387 lines. **Tests:** 21 files, 6,268 lines.  
+> **Passing tests:** 229/278 (82%). **Total project:** 11,655 lines.
 
 ---
 
 ## Current State Assessment
 
-### Completed (Phase 1 — Foundation)
+### ✅ Completed Modules (All Tests Passing)
 
-| Module | Status | Notes |
+| Module | Path | Tests | Lines | Status |
+|---|---|---|---|---|
+| API Auth Manager | `src/api/auth_manager.py` | — | 141 | ✅ |
+| API Data Fetcher | `src/api/data_fetcher.py` | — | 268 | ✅ |
+| Configuration | `src/config/settings.py` | — | 48 | ✅ |
+| Data Fetcher | `src/data/fetcher.py` | 34/34 | 275 | ✅ delegates per-90 to feature_engineering |
+| Understat Scraper | `src/data/understat.py` | — | 182 | ✅ |
+| Sentiment Analysis | `src/data/sentiment.py` | — | 218 | ✅ |
+| Feature Engineering | `src/data/feature_engineering.py` | 29/29 | 354 | ✅ canonical per90() |
+| Preprocessing | `src/data/preprocessing.py` | 23/23 | 168 | ✅ |
+| Feature Selection | `src/data/feature_selection.py` | 24/24 | 247 | ✅ input guards |
+| EDA | `src/data/eda.py` | — | 332 | ✅ |
+| Data Pipeline | `src/pipeline/data_pipeline.py` | — | 139 | ✅ wires to feature_engineering |
+| HDP-GMM (NUTS) | `src/models/hdp_gmm.py` | ⚠️ | 274 | ⚠️ Wishart API fix pending (~9 tests) |
+| HDP-HMM (NUTS) | `src/models/hdp_hmm.py` | ⚠️ | 229 | ⚠️ action-conditioned structure exists |
+| HDP-Poisson-Gamma | `src/models/hdp_poisson_gamma.py` | ✅ | 166 | ✅ imports DEFAULT_TRUNCATION |
+| HDP-NegBin | `src/models/hdp_negbin.py` | ✅ | 174 | ✅ imports DEFAULT_TRUNCATION |
+| **Belief State** | `src/models/belief_state.py` | **33/33** | **538** | ✅ includes 757-dim assembly |
+| **JAX Kernels** | `src/utils/jax_kernels.py` | **24/24** | **465** | ✅ MVN, IW, NIW, FFBS, CRP |
+| **JAX Helpers** | `src/utils/jax_helpers.py` | ✅ | **45** | ✅ prepare_hmm_sequences |
+| **Thompson Sampling** | `src/optimization/thompson_sampling.py` | **11/11** | **237** | ✅ Step A + GenTS-Explore |
+| **MILP Solver** | `src/optimization/milp_solver.py` | **15/15** | **348** | ✅ piecewise transfer costs |
+| **Drift Detector** | `src/mlops/drift_detector.py` | **18/18** | **366** | ✅ KL drift + ASUGS |
+
+### ⚠️ Failing Tests (49 remaining)
+
+| Category | Count | Fix Required |
 |---|---|---|
-| `src/api/auth_manager.py` | ✅ Complete | FPL session auth, CSRF, credential validation |
-| `src/api/data_fetcher.py` | ✅ Complete | HTTP transport, rate limiting, retry, public + protected endpoints |
-| `src/api/inference_service.py` | ⚠️ Stub | FastAPI app with 501 stubs — needs wiring to decision engines |
-| `src/config/settings.py` | ✅ Complete | Env-var based Settings, validation |
-| `src/data/fetcher.py` | ✅ Complete | Data aggregator, delegates per-90 to feature_engineering |
-| `src/data/understat.py` | ✅ Complete | Async scraper, fuzzy name matching |
-| `src/data/sentiment.py` | ✅ Complete | Lazy model loading, graceful degradation |
-| `src/data/feature_engineering.py` | ✅ Complete | Per-90 (canonical), form, FDR, contextual, assembly |
-| `src/data/preprocessing.py` | ✅ Complete | Imputation, standardisation, position splitting |
-| `src/data/feature_selection.py` | ✅ Complete | MI, correlation, Lasso, tree-based, consensus, input guards |
-| `src/data/eda.py` | ✅ Complete | Univariate/bivariate/time-series/position plots |
-| `src/pipeline/data_pipeline.py` | ✅ Complete | Wires fetch → canonical feature_engineering → model update |
-| `src/models/hdp_gmm.py` | ✅ Complete | NUTS via NumPyro, Normal-Wishart, stick-breaking |
-| `src/models/hdp_hmm.py` | ✅ Complete | Markov layer, transition matrices, FFBS structure |
-| `src/models/hdp_poisson_gamma.py` | ✅ Complete | Poisson-Gamma for count data, imports DEFAULT_TRUNCATION |
-| `src/models/hdp_negbin.py` | ✅ Complete | Negative-Binomial for over-dispersed points, imports DEFAULT_TRUNCATION |
-| `src/models/belief_state.py` | ✅ **NEW** | Belief state construction, feature→points mapper, NB posterior |
-| `tests/` (14 test files) | ✅ **243/302 passing** | TDD suite — 58 failures remaining (mock/HDP API issues) |
+| HDP Wishart `df` → `concentration` | ~9 | Update NumPyro API calls |
+| Understat async mock | ~7 | Fix `__aenter__`/`__aexit__` |
+| EDA edge cases | ~6 | Fix assertion expectations |
+| API/Pipeline mock isolation | ~27 | Improve mock setup (not code bugs) |
 
-### Not Started (Phase 2–6)
+### ❌ Not Yet Implemented
 
-| Component | Chapters | Priority |
-|---|---|---|
-| HDP-GMM I²GMM Extension | Ch. 5 §5.5 | High |
-| JAX/XLA Inference (Gibbs/FFBS) | Ch. 7 §7.5 | High |
-| Belief-State MDP Bridge | Ch. 5 §5.7, Ch. 7 §7.9 | High |
-| ASUGS Adaptive Concentration | Ch. 7 §7.8 | Medium |
-| Thompson Sampling (Step A) | Ch. 8 §10.2 | High |
-| TS + MCTS (Step B) | Ch. 8 §8.8 | High |
-| DDQN (Step C) | Ch. 9 §9.5–9.8 | High |
-| Mean-Field Games (MFG) | Ch. 9 §9.10 | High |
-| MILP Constrained Optimiser | Ch. 10 §10.6 | High |
-| Contextual MAB for Captaincy | Ch. 10 §10.7 | Medium |
-| Chip Deployment Optimiser | Ch. 10 §10.10 | Medium |
-| GenTS-Explore for Initial Squad | Ch. 10 §10.8 | Medium |
-| MLOps: Drift Detection (KL-Div) | Ch. 11 | High |
-| MLOps: Model Registry | Ch. 11 | Medium |
-| MLOps: DVC Data Versioning | Ch. 11 | Low |
+| Component | Chapter | Priority | Est. Lines |
+|---|---|---|---|
+| **MCTS (Step B)** | Ch. 8 §8.8 | **High** | ~800 |
+| **DDQN (Step C)** | Ch. 9 §9.5–9.8 | High | ~1,500 |
+| **Knapsack Baselines** (DP, B&B, Greedy) | Ch. 10 §10.3–10.5 | Medium | ~300 |
+| **Captaincy MAB** (LinUCB + Contextual TS) | Ch. 10 §10.7 | Medium | ~200 |
+| **Chip Deployment Optimiser** | Ch. 10 §10.10 | Medium | ~200 |
+| **Mean-Field Games** (MFG/MFC) | Ch. 9 §9.10 | High | ~500 |
+| **MLflow Tracker** | Ch. 11 §11.4 | Medium | ~300 |
+| **FastAPI Service Completion** | Ch. 11 §11.5 | Medium | ~200 |
+| **I²GMM Full Integration** | Ch. 5 §5.5 | High | ~400 |
+| **DVC Data Versioning** | Ch. 11 §11.3 | Low | ~100 |
 
 ---
 
-## Phase 2: Inference & Belief States (Weeks 1–3)
+## Next Stage: Priority Order
 
-### 2.1 JAX/XLA Accelerated Inference
-**Rationale**: MCMC in pure Python is prohibitively slow. JAX's XLA compiler translates recursive inference kernels (FFBS, Gibbs) into optimized machine code, hardware-agnostic across CPU/GPU.
+### Stage 1: Fix Remaining Tests (1 day)
+
+- [ ] Fix HDP Wishart `df` → `concentration` in `hdp_gmm.py` and `hdp_hmm.py`
+- [ ] Fix test source inspection (UnicodeDecodeError on Windows)
+- [ ] Fix Understat async mock `__aenter__`/`__aexit__`
+- **Target:** 278/278 passing (100%)
+
+### Stage 2: MCTS — Step B (Weeks 1–2)
+
+**Rationale:** MCTS is the single largest gap. It bridges myopic TS (Step A) and learned DDQN (Step C). Without it, no multi-gameweek tactical planning.
 
 **Files to create:**
 ```
-src/models/hdp_gmm_gibbs.py      — JAX-native Collapsed Gibbs sampler
-src/models/hdp_hmm_ffbs.py       — JAX lax.scan-powered FFBS
-src/models/jax_kernels.py        — JIT-compiled MVN densities and NIW updates
+src/optimization/mcts_node.py      — MCTS tree node (UCB1, backpropagation)
+src/optimization/rollout.py        — Forward simulation via FFBS + belief updates
+src/optimization/ts_mcts.py        — TS+MCTS orchestration (Ch. 8 §8.8.1)
+tests/test_mcts_node.py            — ~15 tests
+tests/test_rollout.py              — ~10 tests
+tests/test_ts_mcts.py              — ~25 tests
 ```
 
-**Implementation steps:**
-1. Implement **I²GMM** cluster assignment updates with `vmap` for multi-modal form profiles.
-2. Implement **FFBS** temporal loops using `jax.lax.scan` for action-conditioned transitions $\pi_k(a)$.
-3. JIT-compile MVN log-density and NIW sampling kernels.
-4. Add convergence diagnostics: Trace plots, R̂, and ESS using `numpyro.diagnostics`.
+**Implementation steps (per Ch. 8 §8.8.1):**
+1. **Stage 1 — Sample a World**: draw `b̃_j ~ {b_j^{(s)}(t)}_s` from HDP-HMM posterior
+2. **Stage 2 — Build Search Tree**:
+   - Nodes: `(b_t, S_t)` pairs (belief state + squad config)
+   - Edges: Transfer actions `a_t` (swap i out, j in; or "no transfer")
+   - Rollouts: simulate T gameweeks via FFBS (`jax_kernels.py`) + belief updates
+3. **Stage 3 — UCB1 Selection**: `UCB1(s,a) = Q(s,a) + c·√(log N(s) / N(s,a))`
+4. **Stage 4 — Act**: select action with highest visit count at root
+5. **Belief-State Pruning**: limit branching factor to top-100 candidates
+6. **Action-conditioned transitions**: use `π_k(a)` from `hdp_hmm.py`
+7. **Chip logic**: integrate Wildcard, Bench Boost, Triple Captain into rollouts
 
-### 2.2 Belief-State MDP Bridge
-**Rationale**: Belief states are the primary output — the probability distribution over a player's latent form states across $S$ posterior samples.
+**Dependencies:** `jax_kernels.py` (FFBS), `belief_state.py`, `thompson_sampling.py`, `milp_solver.py`.
+
+### Stage 3: Knapsack Baselines + Captaincy (Week 3)
 
 **Files to create:**
 ```
-src/models/belief_state.py       — Belief tensor construction (N x K)
-src/models/feature_to_points.py  — Negative-Binomial posterior predictive mapping
+src/optimization/knapsack.py       — DP, B&B, Greedy (Ch. 10 §10.3–10.5)
+src/optimization/captaincy.py      — LinUCB + Contextual TS (Ch. 10 §10.7)
+src/optimization/chip_optimizer.py — Chip timing bandit (Ch. 10 §10.10)
+tests/test_knapsack.py             — ~20 tests
+tests/test_captaincy.py            — ~15 tests
+tests/test_chip_optimizer.py       — ~15 tests
 ```
 
-**Implementation steps:**
-1. Compute belief vectors: $b_j^{(s)}(t)$ for all players $j$ and MCMC samples $s$.
-2. Implement **Negative-Binomial parameterisation**: map features to points distributions $y \sim NB(r, p)$.
-3. Construct the 757-dimension state representation for Step C (DDQN).
+### Stage 4: DDQN — Step C (Weeks 4–6)
 
-### 2.3 Drift Monitoring & ASUGS
-**Implementation steps:**
-1. Implement KL-divergence monitoring: $KL(b_t || b_{t-1})$.
-2. Trigger **ASUGS online retraining** when structural population shifts exceed $\gamma_{threshold}$.
+**Files to create:**
+```
+src/optimization/ddqn/
+├── state_representation.py    — 757-dim encoder (already partial in belief_state.py)
+├── q_network.py               — Dense(512)→ReLU→LayerNorm→Dropout→...→Dense(|A|)
+├── replay_buffer.py           — Experience replay
+├── action_space.py            — Candidate pruning (top-100)
+├── training_loop.py           — DDQN + HDP-HMM unified training (Ch. 9 §9.6.3)
+├── boltzmann_policy.py        — MaxEnt RL soft-Q updates (Ch. 9 §9.8)
+├── fpl_environment.py         — Gym-like env via FFBS simulation
+└── evaluation.py              — Season simulation, metrics
+tests/test_ddqn.py             — ~30 tests
+tests/test_fpl_environment.py  — ~20 tests
+```
 
----
+### Stage 5: Mean-Field Games (Week 7)
 
-## Phase 3 & 4: Tactical Planning (Weeks 4–8)
+**Files to create:**
+```
+src/optimization/mfg/
+├── mean_field_game.py         — HJB + Fokker-Planck fixed-point
+└── mean_field_control.py      — MFC for single-agent vs population
+tests/test_mfg.py              — ~15 tests
+```
 
-### 3.1 Step A: Thompson Sampling & MILP
-- **Task:** Implement **piecewise linear transfer cost encoding** in `milp_solver.py` to handle the $(f, 4.0)$ discontinuity exactly.
-- **Task:** Build `thompson_sampling.py` to draw points $ỹ_j$ from Negative-Binomial posteriors and solve the myopic knapsack.
+### Stage 6: MLOps Completion (Week 8)
 
-### 3.2 Step B: Multi-GW Horizon (TS+MCTS)
-- **Task:** Implement **action-conditioned transition matrices** $\pi_k(a)$ for scenario planning.
-- **Task:** Build the MCTS search tree with **Belief-State Pruning** (limiting branches to the top-100 candidates).
-- **Task:** Integrate chip deployment logic (Wildcard, Bench Boost) into MCTS rollouts.
-
-### 4.1 Specialized OptimizationBandits
-- **Task:** Implement **LinUCB Contextual Bandit** for captaincy selection using player belief states as context.
-- **Task:** implement **GenTS-Explore** for Initial Squad / Wildcard combinatorial pure exploration.
-
-**Tests:** `tests/test_milp_solver.py` (~25 tests), `tests/test_knapsack.py` (~20 tests),
-`tests/test_captaincy.py` (~15 tests), `tests/test_chip_optimizer.py` (~15 tests)
-
----
-
-## Phase 5: Strategic Planning (Step C) (Weeks 9–12)
-
-### 5.1 Step C: Double DQN (DDQN)
-- **Task:** Build the **757-dimension state encoder** following Ch. 9 §9.5.3 (Squad, Budget, Beliefs, Chips, GW, FT).
-- **Task:** Implement the **Soft Q-Learning** update logic for MaxEnt RL consistency.
-- **Task:** Enable **LayerNorm** and Boltzmann exploration derived from the principled MaxEnt objective.
-
-### 5.2 Mean-Field Game (MFG) Dynamics
-- **Task:** Implement the **MFG Equilibrium Solver** using fixed-point iteration between HJB (value) and Fokker-Planck (population distribution).
-- **Task:** Develop the mean-field price predictor driven by population transfer activity $m_t$.
-- **Task:** Integrate Mean-Field Coupling into the transition matrices for strategic competitive modelling.
-
----
-
-Phase 6 Upgrade: Add Shift-based Drift Detection (KL-divergence of belief states).
-### 6.1 MLOps: Drift Detection & Registry
-- **Task:** Implement **Population-Level Belief State KL-Divergence Monitoring** to detect structural season shifts.
-- **Task:** Configure automated retraining triggers when $KL(m_t || m_{t-1}) > \gamma$.
-- **Task:** Set up MLflow Model Registry for staging TS (Step A) vs DDQN (Step C) models.
-
-### 6.2 FastAPI Service Completion
+**Files to create:**
+```
+src/mlops/
+├── mlflow_tracker.py          — Log params, metrics, artifacts
+└── monitoring.py              — Performance tracking, alerting
+tests/test_mlflow_tracker.py
+tests/test_monitoring.py
+```
 
 **Files to update:**
 ```
 src/api/inference_service.py   — Replace 501 stubs with real endpoints
 ```
 
-**Implementation steps:**
-1. `GET /health` → already working
-2. `GET /beliefs/{player_id}/{gameweek}` → return belief state vector
-3. `POST /recommendations` → run TS/MCTS/DDQN, return squad + captain + chips
-4. `POST /retrain` → trigger full pipeline (fetch → engineer → HDP update → log)
-5. Add Pydantic models for request/response validation
-6. Add rate limiting and API key authentication
+### Stage 7: I²GMM Full Integration (Week 9)
 
-### 6.3 DVC Data Versioning
+**Task:** Wire `nested_crp_assignment()` from `jax_kernels.py` into the full HDP-GMM model, enabling two-level hierarchical cluster assignments for within-cluster multi-modality.
 
-**Implementation steps:**
-1. Initialise DVC: `dvc init`
-2. Track data files: `dvc add data/*.csv`
-3. Configure remote: AWS S3 / Google Drive
-4. Link data version to git commit in MLflow metadata
-
----
-
-## Phase 7: Testing & Validation (Weeks 15–16)
-
-### 7.1 Fix Remaining Test Failures
-
-81 tests currently failing. Categorised by root cause:
-
-| Category | Count | Fix |
-|---|---|---|
-| Missing `python-dotenv` | 7 | ✅ Installed |
-| `__init__.py` missing exports | 31 | ✅ Fixed |
-| `enrich_bootstrap_players` deleted | 3 | ✅ Rewrote tests |
-| Understat async mock issues | 7 | ⚠️ Partially fixed |
-| EDA edge case assertions | 6 | Fix assertion expectations |
-| Feature selection edge cases | 4 | Add input validation guards |
-| HDP Wishart `df` argument | 9 | Fix NumPyro API (use `concentration` not `df`) |
-| Sentiment grouping logic | 1 | Fix test mock |
-| Poisson-Gamma sample count | 1 | Fix assertion |
-
-### 7.2 Integration Tests
-
-**Files to create:**
+**Files to modify:**
 ```
-tests/test_integration_pipeline.py     — End-to-end: fetch → engineer → HDP → TS → MILP
-tests/test_integration_ddqn.py         — End-to-end: belief states → DDQN → season simulation
-tests/test_integration_mcts.py         — End-to-end: TS + MCTS for chip timing
-```
-
-### 7.3 Empirical Validation (Chapter 12)
-
-**Scripts to create:**
-```
-scripts/run_ablation_1.py      — HDP-GMM vs HDP-HMM belief quality
-scripts/run_ablation_2.py      — TS+MCTS vs DDQN
-scripts/run_ablation_8.py      — TS vs Boltzmann vs ε-greedy
-scripts/run_chapter_12.py      — Full empirical results, tables, figures
+src/models/hdp_gmm.py          — Add I²GMM layer
+tests/test_hdp_gmm.py          — Add I²GMM tests (~15)
 ```
 
 ---
@@ -199,42 +167,114 @@ scripts/run_chapter_12.py      — Full empirical results, tables, figures
 ## Dependency Graph
 
 ```
-Phase 2 (Posterior Inference)
+Stage 1 (Test Fixes)
     │
-    ├── belief_state.py ← hdp_gmm_gibbs.py, hdp_hmm_ffbs.py
-    └── asugs.py ← belief_state.py
+Stage 2 (MCTS)
     │
-Phase 3 (Thompson Sampling)
+    ├── mcts_node.py ← belief_state.py, thompson_sampling.py
+    ├── rollout.py ← jax_kernels.py (FFBS), belief_state.py
+    └── ts_mcts.py ← mcts_node.py, rollout.py, milp_solver.py
     │
-    ├── thompson_sampling.py ← belief_state.py
-    ├── ts_mcts.py ← thompson_sampling.py, hdp_hmm_ffbs.py
-    └── posterior_predictive.py ← belief_state.py
+Stage 3 (Knapsack + Captaincy + Chips)
     │
-Phase 4 (Constrained Optimisation)
+    ├── knapsack.py ← milp_solver.py (baseline comparison)
+    ├── captaincy.py ← belief_state.py (context = belief vectors)
+    └── chip_optimizer.py ← milp_solver.py (constraint layer)
     │
-    ├── milp_solver.py ← thompson_sampling.py, ts_mcts.py
-    ├── knapsack.py ← milp_solver.py
-    ├── captaincy.py ← milp_solver.py
-    └── chip_optimizer.py ← milp_solver.py
+Stage 4 (DDQN)
     │
-Phase 5 (DDQN)
+    ├── ddqn/state_representation.py ← belief_state.py (757-dim, already partial)
+    ├── ddqn/q_network.py ← state_representation.py
+    ├── ddqn/training_loop.py ← q_network.py, fpl_environment.py
+    ├── ddqn/boltzmann_policy.py ← training_loop.py (MaxEnt RL)
+    ├── ddqn/fpl_environment.py ← belief_state.py, jax_kernels.py (FFBS sim)
+    └── ddqn/replay_buffer.py ← training_loop.py
     │
-    ├── state_representation.py ← belief_state.py
-    ├── q_network.py ← state_representation.py
-    ├── training_loop.py ← q_network.py, fpl_environment.py
-    ├── boltzmann_policy.py ← training_loop.py
-    ├── fpl_environment.py ← belief_state.py
-    └── mfg/ ← training_loop.py, hdp_hmm_ffbs.py
+Stage 5 (MFG)
     │
-Phase 6 (MLOps)
+    └── mfg/ ← training_loop.py, hdp_hmm.py (action-conditioned transitions)
+    │
+Stage 6 (MLOps)
     │
     ├── mlflow_tracker.py ← ALL (logs everything)
-    ├── inference_service.py ← thompson_sampling.py, ts_mcts.py, ddqn, milp_solver.py
-    └── monitoring.py ← mlflow_tracker.py
+    ├── monitoring.py ← drift_detector.py (already done)
+    └── inference_service.py ← TS, MCTS, DDQN, MILP
     │
-Phase 7 (Testing & Validation)
+Stage 7 (I²GMM)
     │
-    └── Integration tests + Ablation scripts
+    └── hdp_gmm.py ← jax_kernels.py (nested_crp_assignment)
+```
+
+---
+
+## Module Map (Current + Target)
+
+```
+src/
+├── api/                          ✅ Infrastructure Layer (complete)
+│   ├── auth_manager.py           ✅
+│   ├── data_fetcher.py           ✅
+│   └── inference_service.py      ⚠️ Stub → Stage 6
+├── config/                       ✅ (complete)
+│   └── settings.py               ✅
+├── data/                         ✅ Data Domain Layer (complete)
+│   ├── fetcher.py                ✅
+│   ├── understat.py              ✅
+│   ├── sentiment.py              ✅
+│   ├── feature_engineering.py    ✅
+│   ├── preprocessing.py          ✅
+│   ├── feature_selection.py      ✅
+│   └── eda.py                    ✅
+├── models/                       ⚠️ Model Layer (partial)
+│   ├── hdp_gmm.py                ⚠️ Needs I²GMM integration (Stage 7)
+│   ├── hdp_hmm.py                ⚠️ Action-conditioned structure exists
+│   ├── hdp_poisson_gamma.py      ✅
+│   ├── hdp_negbin.py             ✅
+│   └── belief_state.py           ✅ (33 tests, includes 757-dim assembly)
+├── utils/                        ✅ Utilities (complete)
+│   ├── jax_helpers.py            ✅
+│   └── jax_kernels.py            ✅ (24 tests: MVN, IW, NIW, FFBS, CRP)
+├── optimization/                 ⚠️ Decision Layer (partial)
+│   ├── thompson_sampling.py      ✅ (Step A, 11 tests)
+│   ├── milp_solver.py            ✅ (15 tests)
+│   ├── mcts_node.py              → Stage 2
+│   ├── rollout.py                → Stage 2
+│   ├── ts_mcts.py                → Stage 2
+│   ├── knapsack.py               → Stage 3
+│   ├── captaincy.py              → Stage 3
+│   ├── chip_optimizer.py         → Stage 3
+│   ├── ddqn/                     → Stage 4
+│   └── mfg/                      → Stage 5
+├── pipeline/                     ✅ (complete)
+│   └── data_pipeline.py          ✅
+└── mlops/                        ⚠️ MLOps Layer (partial)
+    ├── drift_detector.py         ✅ (18 tests: KL drift + ASUGS)
+    ├── mlflow_tracker.py         → Stage 6
+    └── monitoring.py             → Stage 6
+```
+
+---
+
+## Library Extraction Plan
+
+The following modules have **zero FPL-specific dependencies** and can be packaged as a standalone library `bayesian-inference-kernels`:
+
+| Source Module | Target Package | Dependencies |
+|---|---|---|
+| `src/utils/jax_kernels.py` | `bik/kernels.py` | jax, jaxlib, scipy |
+| `src/utils/jax_helpers.py` | `bik/helpers.py` | jax, numpy |
+| `src/mlops/drift_detector.py` | `bik/drift.py` | numpy, scipy |
+| `src/models/belief_state.py` (partial) | `bik/belief.py` | numpy, sklearn |
+
+**Proposed `pyproject.toml`:**
+```toml
+[project]
+name = "bayesian-inference-kernels"
+version = "0.1.0"
+dependencies = ["jax>=0.4.0", "jaxlib>=0.4.0", "scipy>=1.10", "numpy>=1.24"]
+
+[project.optional-dependencies]
+drift = ["scikit-learn>=1.2"]
 ```
 
 ---
@@ -243,109 +283,26 @@ Phase 7 (Testing & Validation)
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| FPL API changes breaking data fetcher | High | Version-locked API contracts, fallback to cached data |
-| NumPyro Wishart API incompatibility | Medium | Use `LKJ` prior as alternative, or manual Cholesky parameterisation |
-| MCTS computational explosion | High | Aggressive action pruning, parallel rollout execution |
-| DDQN training instability | Medium | LayerNorm, gradient clipping, target network, extensive hyperparameter search |
-| Insufficient historical data | Medium | Data augmentation via simulation, transfer learning from prior seasons |
-| MILP solver timeout on large instances | Low | Time limit with best-known solution fallback, warm-start from greedy |
+| MCTS computational explosion | High | Aggressive pruning (top-100), UCB-guided search |
+| DDQN training instability | Medium | LayerNorm, gradient clipping, target network |
+| NumPyro Wishart API break | Low | Use `LKJCholesky` as alternative |
+| FPL API changes | Medium | Schema validation, cached fallback |
+| Insufficient historical data | Medium | Simulation-based data augmentation |
 
 ---
 
-## Module Map (Final Target State)
+## Completed Checklist
 
-```
-src/
-├── api/                          # Infrastructure Layer
-│   ├── auth_manager.py
-│   ├── data_fetcher.py
-│   └── inference_service.py      # ← Complete (replace stubs)
-├── config/
-│   └── settings.py
-├── data/                         # Data Domain Layer
-│   ├── fetcher.py
-│   ├── understat.py
-│   ├── sentiment.py
-│   ├── feature_engineering.py
-│   ├── preprocessing.py
-│   ├── feature_selection.py
-│   └── eda.py
-├── models/                       # Model Layer
-│   ├── hdp_gmm.py                # NUTS implementation
-│   ├── hdp_gmm_gibbs.py          # ← NEW: JAX-native I²GMM
-│   ├── hdp_hmm_ffbs.py           # ← NEW: JAX lax.scan trajectory sampling
-│   ├── jax_kernels.py            # ← NEW: JIT MVN/NIW samplers
-│   ├── belief_state.py           # ← NEW: Belief-State MDP bridge
-│   ├── feature_to_points.py      # ← NEW: NB Points posterior mapping
-│   ├── asugs.py                  # ← NEW: Adaptive drift updates
-├── optimization/                  # Decision Layer
-│   ├── thompson_sampling.py      # ← NEW: Step A
-│   ├── posterior_predictive.py   # ← NEW: Points posterior
-│   ├── ts_mcts.py                # ← NEW: Step B
-│   ├── mcts_node.py              # ← NEW
-│   ├── rollout.py                # ← NEW
-│   ├── milp_solver.py            # ← NEW: MILP constraints
-│   ├── knapsack.py               # ← NEW: DP, B&B, Greedy, GA
-│   ├── captaincy.py              # ← NEW: Contextual MAB
-│   ├── chip_optimizer.py         # ← NEW: Chip timing bandit
-│   ├── ddqn/                     # ← NEW: Step C
-│   │   ├── state_representation.py
-│   │   ├── q_network.py
-│   │   ├── replay_buffer.py
-│   │   ├── action_space.py
-│   │   ├── training_loop.py
-│   │   ├── boltzmann_policy.py
-│   │   ├── fpl_environment.py
-│   │   └── evaluation.py
-│   └── mfg/                      # ← NEW: Mean-field
-│       ├── mean_field_game.py
-│       └── mean_field_control.py
-├── pipeline/
-│   └── data_pipeline.py
-└── mlops/                        # ← NEW: MLOps Layer
-    ├── mlflow_tracker.py
-    ├── model_registry.py
-    └── monitoring.py
-
-tests/                            # Test Suite (~600+ tests target)
-├── test_api.py
-├── test_api_data_fetcher.py
-├── test_fetcher.py
-├── test_preprocessing.py
-├── test_feature_engineering.py
-├── test_feature_selection.py
-├── test_understat.py
-├── test_sentiment.py
-├── test_eda.py
-├── test_data_pipeline.py
-├── test_hdp_gmm.py
-├── test_hdp_hmm.py
-├── test_hdp_other_models.py
-├── test_hdp_gmm_gibbs.py         # ← NEW
-├── test_hdp_hmm_ffbs.py          # ← NEW
-├── test_belief_state.py          # ← NEW
-├── test_thompson_sampling.py     # ← NEW
-├── test_ts_mcts.py               # ← NEW
-├── test_milp_solver.py           # ← NEW
-├── test_knapsack.py              # ← NEW
-├── test_captaincy.py             # ← NEW
-├── test_chip_optimizer.py        # ← NEW
-├── test_ddqn.py                  # ← NEW
-├── test_fpl_environment.py       # ← NEW
-├── test_integration_pipeline.py  # ← NEW
-├── test_integration_ddqn.py      # ← NEW
-└── test_integration_mcts.py      # ← NEW
-```
-
----
-
-## Execution Order (Immediate Next Steps)
-
-1. **Fix 81 failing tests** (unblock CI/CD pipeline)
-2. **Implement belief_state.py** (the bridge that every decision engine needs)
-3. **Implement thompson_sampling.py** (Step A — simplest decision engine, depends only on belief states)
-4. **Implement milp_solver.py** (constraint layer that TS needs)
-5. **Implement feature_to_points.py** (maps HDP outputs → point predictions)
-6. **Implement posterior_predictive.py** (Negative-Binomial parameterisation)
-
-These six steps deliver a **working end-to-end pipeline**: data → features → HDP → belief states → point predictions → Thompson Sampling → MILP → optimal squad. Everything else (MCTS, DDQN, MFG, MLOps) extends this foundation.
+- [x] Phase 1: Data Pipeline (fetcher, preprocessing, feature engineering, EDA, selection)
+- [x] Phase 2.1: JAX/XLA Kernels (MVN, IW, NIW, FFBS, CRP)
+- [x] Phase 2.2: Belief State Bridge (belief vectors, 757-dim assembly, NB posterior)
+- [x] Phase 3.1: Thompson Sampling Step A (posterior sampling, temperature annealing)
+- [x] Phase 3.1: MILP Constrained Optimiser (full FPL constraints, piecewise transfer costs)
+- [x] Phase 5.1: KL Drift Detection + ASUGS (population drift, percentile thresholds)
+- [ ] Phase 2.3: Fix Remaining 49 Test Failures
+- [ ] Phase 2.4: I²GMM Full Integration
+- [ ] Phase 3.2: MCTS Step B
+- [ ] Phase 3.3: Knapsack Baselines + Captaincy + Chip Optimiser
+- [ ] Phase 4: DDQN Step C + Boltzmann Policy
+- [ ] Phase 4.2: Mean-Field Games
+- [ ] Phase 6: MLOps Completion (MLflow, FastAPI, DVC)
