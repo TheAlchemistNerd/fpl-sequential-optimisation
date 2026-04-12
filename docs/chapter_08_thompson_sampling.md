@@ -293,7 +293,43 @@ The computational complexity of MCTS is $O(b^d)$, where $b$ is the branching fac
 
 This exponential scaling is the fundamental motivation for **Step C (DDQN)**: the neural network in Chapter 9 learns a generalised value function that approximates the optimal long-horizon policy without explicit tree expansion. DDQN trades off the interpretability and exactness of MCTS for scalability to the full 38-game season.
 
-## 8.9 Summary
+## 8.9 Production Implementation Notes
+
+### 8.9.1 Greedy Knapsack vs. MILP Optimiser
+
+The Thompson Sampling selection algorithm (§8.4) solves a deterministic knapsack problem on the sampled point predictions. The production implementation provides **two tiers** of knapsack solving:
+
+1. **Greedy budget-feasible selection** (`thompson_sampling_select` in `src/optimization/thompson_sampling.py`): Players are sorted by sampled points in descending order and selected greedily until the budget is exhausted. This is fast ($O(N \log N)$) and produces a feasible solution, but may be suboptimal when budget constraints create non-trivial trade-offs (e.g., one premium player vs. three mid-priced players).
+
+2. **MILP exact solution** (`solve_squad_optimisation` in `src/optimization/milp_solver.py`): The full constrained optimisation problem is solved using PuLP with the CBC solver, enforcing all FPL rules (formation 2-5-5-3, per-team limit $\leq 3$, starting XI validity, captaincy). This guarantees the globally optimal solution but takes 1–30 seconds per solve (with a 30-second time limit).
+
+The greedy tier is used for **rapid prototyping and single-gameweek decisions** where the budget slack is typically large enough that the greedy solution is near-optimal. The MILP tier is used for **production decisions** and **transfer-aware optimisation** (where the piecewise linear transfer cost encoding requires exact constraint handling).
+
+### 8.9.2 Transfer Cost Encoding
+
+The MILP solver implements the piecewise linear transfer cost function (§10.9.2) using **auxiliary binary variables**. For each player $i$, a binary variable $t_i$ indicates whether the player's squad membership has changed:
+
+$$t_i \geq x_i - x_i^{\text{prev}}, \quad t_i \geq x_i^{\text{prev}} - x_i,$$
+
+where $x_i$ is the new squad selection and $x_i^{\text{prev}}$ is the previous squad membership. The total number of transfers is $k = \frac{1}{2}\sum_i t_i$, and the transfer cost is encoded as:
+
+$$\text{cost} \geq 0, \quad \text{cost} \geq 4 \cdot (k - f),$$
+
+where $f$ is the number of free transfers available. This encoding correctly handles the discontinuity at $k = f$ (zero cost for transfers within the free allowance, 4 points per transfer beyond).
+
+### 8.9.3 Temperature Annealing Schedule
+
+The temperature parameter $\tau$ (Section 8.5.3) controls the exploration-exploitation trade-off by scaling the posterior variance. The production implementation uses a **linear annealing schedule**:
+
+$$\tau_t = \tau_0 \cdot \left(1 - \frac{t}{T}\right) + \tau_{\min} \cdot \frac{t}{T},$$
+
+with default values $\tau_0 = 2.0$ and $\tau_{\min} = 0.1$. Early gameweeks ($t \ll T$) use high temperature to encourage exploration of uncertain players (new signings, returning from injury), while late gameweeks ($t \approx T$) use low temperature to exploit well-established form assessments.
+
+### 8.9.4 GenTS-Explore Position-Aware Selection
+
+The GenTS-Explore algorithm (§8.6) for combinatorial squad selection implements **position-aware greedy**: players are grouped by position (GK, DEF, MID, FWD) and the required formation (2-5-5-3) is satisfied within each group before moving to the next. This ensures that the budget allocation across positions respects the FPL rules, rather than selecting the 15 highest-scoring players regardless of position (which would often produce invalid squads).
+
+## 8.10 Summary
 
 This chapter has developed the first two stages of the FPL planning hierarchy: **Step A (Thompson Sampling)** and **Step B (TS+MCTS)**. Grounded in the HDP-GMM/HDP-HMM belief states from Chapter 7, Thompson Sampling provides a principled Bayesian framework for single-gameweek decisions, balancing exploration and exploitation through posterior sampling. By coupling TS with Monte Carlo Tree Search, the framework extends to medium-horizon tactical decisions, enabling explicit lookahead for chip deployment and transfer timing. Together, these methods form a comprehensive toolkit for Bayesian decision-making in the highly stochastic FPL environment, with Step A handling immediate squad selection and Step B addressing medium-term scenario planning.
 

@@ -343,6 +343,30 @@ When a new model version is developed, it is evaluated via shadow mode:
 2. **Comparison**: After 4 gameweeks, compare the cumulative points, prediction errors, and rank trajectories.
 3. **Promotion**: If the new model outperforms the current model, promote it to "Production" via the model registry.
 
-## 11.10 Summary
+## 11.10 Production Implementation Notes
+
+### 11.10.1 KL-Divergence Implementation Details
+
+The KL-divergence computation (§11.6.2) requires careful handling of near-zero probabilities to avoid numerical instability. The implementation uses **epsilon smoothing**:
+
+$$\tilde{p}_k = \text{clip}(p_k, \epsilon, 1.0), \quad \tilde{q}_k = \text{clip}(q_k, \epsilon, 1.0), \quad \text{followed by renormalisation},$$
+
+with $\epsilon = 10^{-10}$. Without this smoothing, belief states with zero probability in some clusters (which occurs when the MCMC chain assigns no posterior mass to certain clusters) would produce $-\infty$ in the log-ratio computation.
+
+The drift threshold is computed as the **95th percentile** of historical drift values, requiring at least 5 historical observations for a meaningful threshold. The combined retraining decision (`should_retrain`) integrates three independent signals — KL drift, performance degradation (recent points below the 25th percentile of historical), and forced periodic schedule — triggering retraining if any signal fires.
+
+### 11.10.2 ASUGS Gradient Simplification
+
+The ASUGS online update (§11.7.2) uses a simplified gradient approximation that avoids the digamma function $\psi(\cdot)$, which can be numerically unstable for large arguments. The approximation replaces the exact gradient:
+
+$$\frac{\partial}{\partial \gamma} \log p(z_n \mid z_{1:n-1}, \gamma) = \frac{1}{\gamma + n - 1} - \psi(\gamma + n - 1) + \psi(\gamma),$$
+
+with a simpler form based on the difference between observed and expected new cluster rates:
+
+$$\text{gradient} \approx \frac{\min(K/n, 1) - \gamma / (\gamma + n - 1)}{\gamma + n - 1}.$$
+
+This approximation is algebraically equivalent to the first-order Taylor expansion of the digamma-based gradient and is numerically stable for all $\gamma > 0$. The step size follows the standard schedule $\eta_n = 1/n$.
+
+## 11.11 Summary
 
 This chapter has presented the complete MLOps pipeline for the FPL sequential optimisation system. A workflow orchestrator manages the data ingestion and model updating workflow, ensuring timely execution after each gameweek. Data versioning ensures full reproducibility. An experiment registry tracks models, metrics, and artefacts. The prediction service, containerised for portability, exposes an API for generating recommendations. KL-divergence drift detection monitors the belief state distributions for concept drift, triggering automated retraining when necessary. GPU/TPU acceleration reduces MCMC runtime from hours to minutes. The system is designed to be platform-agnostic, deployable to any environment that supports container runtimes.

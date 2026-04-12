@@ -400,7 +400,29 @@ $$\max \; \sum_{t=1}^{38} \gamma^{t-1} \left( R_t + \mathbb{I}(\chi_t = \text{BB
 
 subject to the constraint that each chip is used at most once.
 
-## 10.11 Summary
+## 10.11 Production Implementation Notes
+
+### 10.11.1 PuLP and CBC Solver
+
+The MILP formulation (§10.6) is implemented using **PuLP**, a Python linear programming modelling library, with the **CBC (Coin-or Branch and Cut)** solver as the default backend. CBC is an open-source MILP solver included with PuLP, requiring no additional installation or licensing.
+
+The solver is configured with a 30-second time limit, which is sufficient for the typical problem size ($N \approx 600$ players, $\approx 50$ constraints). If the solver does not find the optimal solution within the time limit, it returns the best feasible solution found so far. In practice, the MILP typically solves in 1–5 seconds for standard squad selection problems.
+
+### 10.11.2 Auxiliary Variable Encoding for Transfer Costs
+
+The piecewise linear transfer cost function (§10.9.2) is encoded using **auxiliary binary variables** $t_i$ for each player:
+
+$$t_i \geq x_i - x_i^{\text{prev}}, \quad t_i \geq x_i^{\text{prev}} - x_i, \quad t_i \in \{0, 1\}.$$
+
+Since $x_i, x_i^{\text{prev}} \in \{0, 1\}$, this encoding ensures $t_i = |x_i - x_i^{\text{prev}}|$, i.e., $t_i = 1$ if and only if the player's squad membership has changed. The total number of transfers is then $k = \frac{1}{2}\sum_i t_i$ (the factor of $\frac{1}{2}$ accounts for the fact that each transfer involves one player in and one player out, so $t_i = 1$ for both).
+
+The production implementation (`src/optimization/milp_solver.py`) solves the **net gain** objective:
+
+$$\max \left(\sum_{j \in S_{\text{new}}} v_j \cdot s_j + v_c - \text{cost}\right),$$
+
+where the cost term correctly handles the discontinuity at the free transfer allowance.
+
+## 10.12 Summary
 
 This chapter has provided a comprehensive treatment of the constrained optimisation layer in the FPL decision pipeline. The 0/1 Knapsack Problem captures the core budget-squad trade-off, solvable exactly via Dynamic Programming. The full FPL problem — with positional, per-team, formation, captaincy, and transfer cost constraints — is formulated as a MILP, solvable in sub-second time by modern solvers. The captaincy sub-problem is addressed via Contextual Thompson Sampling and LinUCB. The GenTS-Explore algorithm handles the combinatorial pure exploration setting of initial squad selection. Chip deployment is optimised via a multi-armed bandit over remaining gameweeks.
 

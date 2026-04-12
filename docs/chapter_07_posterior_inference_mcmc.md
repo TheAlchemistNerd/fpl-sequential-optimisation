@@ -419,9 +419,37 @@ The quality of the belief states — their smoothness, entropy, and predictive p
 
 Furthermore, **Ablation 1** in Chapter 12 (Section 12.5.1) directly compares the belief states produced by the iid HDP-GMM against the temporal HDP-HMM, evaluating prediction MAE, cluster stability, and belief state entropy. The hypothesis is that the HDP-HMM produces smoother, more predictive belief states due to its explicit modelling of form persistence.
 
-## 7.10 Summary
+## 7.10 Production Implementation Notes
 
-This chapter has provided a comprehensive treatment of posterior inference for the HDP-GMM and HDP-HMM. Gibbs sampling with conjugate updates provides exact (asymptotic) posterior samples. NUTS via NumPyro handles non-conjugate models with automatic gradient computation and JIT acceleration. Numba accelerates loop-intensive Gibbs steps by 10–30x. Variational Inference offers a faster alternative for online updates. A suite of convergence diagnostics ensures reliable inference. The ASUGS algorithm enables online adaptation of concentration parameters.
+### 7.10.1 JAX/XLA Kernel Library vs. Numba
+
+The original design considered Numba for JIT-accelerating the Gibbs sampling loops (§7.5). The production implementation uses **JAX/XLA** instead, for three reasons:
+
+1. **Hardware portability**: JAX compiles to CPU, GPU, and TPU without code changes, whereas Numba is CPU-only.
+2. **Unified memory space**: Inference kernels (`mvn_log_density`, `sample_inverse_wishart`, `niw_posterior_update`) and the probabilistic model (NumPyro) share the same JAX device memory, eliminating costly data transfers between Python/NumPy and accelerator backends.
+3. **Composable transformations**: `jax.vmap` (vectorisation), `jax.jit` (compilation), and `jax.lax.scan` (loop fusion) compose freely, enabling the full FFBS pipeline to be compiled into a single XLA kernel.
+
+The kernel library (`src/utils/jax_kernels.py`) provides ten JIT-compiled functions covering all conjugate computations: MVN log-density, Inverse-Wishart sampling (Bartlett decomposition), NIW posterior updates, NIW sampling, FFBS forward/backward passes, batched categorical sampling, and I²GMM nested CRP assignment.
+
+### 7.10.2 ASUGS Gradient Approximation
+
+The theoretical ASUGS gradient (§7.8) involves the digamma function $\psi(\cdot)$, which can be numerically unstable for large arguments. The production implementation (`src/mlops/drift_detector.py`) uses a **simplified gradient approximation** based on the difference between observed and expected new cluster rates:
+
+$$\text{gradient} \approx \frac{\text{observed\_new} - \text{expected\_new}}{\gamma + n - 1},$$
+
+where $\text{observed\_new} = \min(K / n, 1)$ is the empirical cluster-to-observation ratio and $\text{expected\_new} = \gamma / (\gamma + n - 1)$. This approximation is algebraically equivalent to the first-order Taylor expansion of the digamma-based gradient and is numerically stable for all $\gamma > 0$.
+
+### 7.10.3 KL-Divergence Drift Detection
+
+The KL-divergence monitoring (§7.8, §11.6.2) uses **epsilon-smoothed probabilities** to avoid $\log(0)$ singularities:
+
+$$\text{KL}(p \parallel q) = \sum_{k=1}^K \tilde{p}_k \log\left(\frac{\tilde{p}_k}{\tilde{q}_k}\right), \quad \text{where } \tilde{p}_k = \text{clip}(p_k, \epsilon, 1) \text{ and renormalised},$$
+
+with $\epsilon = 10^{-10}$. The population-level drift $\text{KL}_{\text{pop}}(t)$ is compared against the 95th percentile of historical values to trigger retraining. The combined retraining decision (`should_retrain`) integrates three signals: KL drift, performance degradation (recent points below 25th percentile), and forced periodic schedule.
+
+## 7.11 Summary
+
+This chapter has provided a comprehensive treatment of posterior inference for the HDP-GMM and HDP-HMM. Gibbs sampling with conjugate updates provides exact (asymptotic) posterior samples. NUTS via NumPyro handles non-conjugate models with automatic gradient computation. JAX/XLA accelerates all conjugate computations (MVN, NIW, FFBS) into hardware-agnostic JIT-compiled kernels, replacing the original Numba-based approach. Variational Inference offers a faster alternative for online updates. A suite of convergence diagnostics ensures reliable inference. The ASUGS algorithm, coupled with KL-divergence drift detection, enables event-driven online adaptation of concentration parameters.
 
 Most importantly, Section 7.9 has established that the MCMC posterior samples are not isolated statistical outputs — they are the **belief-state representation** that forms the mathematical input to all downstream decision engines. Thompson Sampling (Chapter 8) samples from these belief states to achieve natural exploration. MCTS (Chapter 9) plans across sampled belief states for multi-gameweek lookahead. DDQN (Chapter 9) learns to map belief-state uncertainty into long-term value estimates.
 

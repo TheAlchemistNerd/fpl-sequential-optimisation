@@ -353,8 +353,9 @@ def ffbs_backward_sample(
     ts = jnp.arange(T - 2, -1, -1)
     _, states_reversed = lax.scan(backward_step, init, ts)
 
-    # Prepend z_T and reverse to get forward order
-    return jnp.concatenate([jnp.array([z_T]), states_reversed[::-1]])
+    # states_reversed = [z_{T-2}, z_{T-3}, ..., z_0]
+    # Reverse to get [z_0, z_1, ..., z_{T-2}], then append z_T (= z_{T-1})
+    return jnp.concatenate([states_reversed[::-1], jnp.array([z_T])])
 
 
 def ffbs_full(
