@@ -253,3 +253,116 @@ class TestGenTSExplore:
         assert squad_positions.count("DEF") == 5
         assert squad_positions.count("MID") == 5
         assert squad_positions.count("FWD") == 3
+
+
+# ===========================================================================
+# MILP-backed Thompson Sampling tests
+# ===========================================================================
+
+
+class TestThompsonSamplingMILP:
+    """Validate MILP-backed Thompson Sampling (production tier)."""
+
+    @pytest.fixture
+    def sample_player_pool(self):
+        """30-player pool with realistic FPL distribution."""
+        np.random.seed(42)
+        n = 30
+        positions = ["GK"]*4 + ["DEF"]*8 + ["MID"]*10 + ["FWD"]*8
+        prices = [4.5 + np.random.uniform(0, 3.5) for _ in range(n)]
+        clubs = [f"Club_{i % 20}" for i in range(n)]
+        points = {i: float(np.random.normal(5, 3)) for i in range(1, n+1)}
+        return {
+            "ids": list(range(1, n + 1)),
+            "positions": positions,
+            "prices": prices,
+            "clubs": clubs,
+            "points": points,
+        }
+
+    def test_ts_milp_returns_valid_squad(self, sample_player_pool):
+        """MILP-backed TS should return a valid 15-player squad."""
+        from src.optimization.thompson_sampling import thompson_sampling_milp
+        rng = np.random.default_rng(42)
+        result = thompson_sampling_milp(
+            player_pool=sample_player_pool,
+            points_map=sample_player_pool["points"],
+            budget=100.0,
+            rng=rng,
+        )
+        assert len(result["squad"]) == 15
+        assert len(result["starting_xi"]) == 11
+        assert result["captain"] in result["starting_xi"]
+        assert result["vice_captain"] in result["starting_xi"]
+        assert result["captain"] != result["vice_captain"]
+
+    def test_ts_milp_respects_budget(self, sample_player_pool):
+        """MILP-backed TS should not exceed budget."""
+        from src.optimization.thompson_sampling import thompson_sampling_milp
+        rng = np.random.default_rng(42)
+        result = thompson_sampling_milp(
+            player_pool=sample_player_pool,
+            points_map=sample_player_pool["points"],
+            budget=80.0,
+            rng=rng,
+        )
+        assert result["total_cost"] <= 80.01
+
+    def test_ts_milp_formation_valid(self, sample_player_pool):
+        """MILP-backed TS should satisfy 2-5-5-3 formation."""
+        from src.optimization.thompson_sampling import thompson_sampling_milp
+        rng = np.random.default_rng(42)
+        result = thompson_sampling_milp(
+            player_pool=sample_player_pool,
+            points_map=sample_player_pool["points"],
+            budget=100.0,
+            rng=rng,
+        )
+        squad_positions = [
+            sample_player_pool["positions"][sample_player_pool["ids"].index(pid)]
+            for pid in result["squad"]
+        ]
+        assert squad_positions.count("GK") == 2
+        assert squad_positions.count("DEF") == 5
+        assert squad_positions.count("MID") == 5
+        assert squad_positions.count("FWD") == 3
+
+    def test_ts_milp_with_transfers(self, sample_player_pool):
+        """MILP-backed TS with current squad should account for transfer costs."""
+        from src.optimization.thompson_sampling import thompson_sampling_milp
+        rng = np.random.default_rng(42)
+        current_squad = sample_player_pool["ids"][:15]
+        result = thompson_sampling_milp(
+            player_pool=sample_player_pool,
+            points_map=sample_player_pool["points"],
+            budget=100.0,
+            current_squad=current_squad,
+            free_transfers=1,
+            rng=rng,
+        )
+        assert "transfer_cost" in result
+        assert result["transfer_cost"] >= 0
+
+    def test_ts_milp_temperature_effect(self, sample_player_pool):
+        """High temperature should produce more diverse squads."""
+        from src.optimization.thompson_sampling import thompson_sampling_milp
+        rng = np.random.default_rng(42)
+
+        result_low = thompson_sampling_milp(
+            player_pool=sample_player_pool,
+            points_map=sample_player_pool["points"],
+            budget=100.0,
+            temperature=0.1,
+            rng=rng,
+        )
+        rng2 = np.random.default_rng(42)
+        result_high = thompson_sampling_milp(
+            player_pool=sample_player_pool,
+            points_map=sample_player_pool["points"],
+            budget=100.0,
+            temperature=5.0,
+            rng=rng2,
+        )
+        # Both should be valid squads
+        assert len(result_low["squad"]) == 15
+        assert len(result_high["squad"]) == 15

@@ -1,16 +1,16 @@
 # Code vs. Theory: Implementation Audit & Documentation Analysis
 
-> **Date:** 12 April 2026  
-> **Scope:** Chapters 3–11 of the dissertation (docs/) versus all 31 source files (5,387 lines) and 21 test files (6,268 lines).  
+> **Date:** 12 April 2026 (Updated: 12 April 2026 — docs overhaul complete)
+> **Scope:** Chapters 3–11 of the dissertation (docs/) versus all 33 source files (~6,000 lines) and 22 test files (~6,800 lines).
 > **Purpose:** Identify where the implementation has surpassed the docs, where docs need rewriting, and assess reusability of novel code.
 
 ---
 
 ## 1. Executive Summary
 
-This project has evolved from a dissertation methodology document into a partially-implemented production system. Of the ~9 dissertation chapters covering technical content, **4 chapters have implementations that now exceed or diverge from the docs**, requiring theoretical updates. **5 chapters are still fully aligned** (no code exists yet for those chapters). **One novel contribution** — the JAX-accelerated inference kernel library — has been written with zero dissertation coverage and represents significant standalone value.
+This project has evolved from a dissertation methodology document into a partially-implemented production system. Of the ~9 dissertation chapters covering technical content, **4 chapters have been updated with production implementation notes** (Ch. 5, 6, 7, 8, 10, 11). **3 chapters remain unchanged** (Ch. 3, 4, 9 — accurate as written). **One novel contribution** — the JAX-accelerated inference kernel library — has been written with profiling tests and represents significant standalone value.
 
-The key finding: **the code is now ahead of the docs in implementation detail, but the docs are ahead of the code in theoretical depth**. The implementation has made pragmatic choices (JAX over Numba, PuLP over custom solvers, belief-state assembly as a bridge) that the dissertation does not yet reflect.
+The key finding: **the code is now ahead of the docs in implementation detail, but the docs are ahead of the code in theoretical depth**. The implementation has made pragmatic choices (JAX over Numba, PuLP over custom solvers, belief-state assembly as a bridge) that the dissertation now reflects via new "Production Implementation Notes" sections.
 
 ---
 
@@ -55,10 +55,11 @@ Additionally, the **I²GMM extension** (§5.5) is partially implemented — the 
 
 **Belief state construction** (§5.7) is **fully implemented** in `belief_state.py` (538 lines), but goes beyond the docs: the code includes JAX-native belief vector computation (`compute_belief_vecs_jax`), the 757-dimensional state assembler (`assemble_757_state`), and the `FeatureToPointsMapper` (Ridge + GBM) — none of which are described in Chapter 5.
 
-**Docs rewriting needed:** ✅ **Yes — Section 5.4 and §5.7.**
-- §5.4 should be updated to acknowledge **NUTS as the primary inference method**, with collapsed Gibbs as an alternative (implemented via JAX kernels but not yet wired).
-- §5.7 needs a new subsection on the **757-dimensional belief-state MDP bridge**, describing how belief vectors are computed from MCMC samples and assembled into the strategic state representation.
-- §5.5 should note that I²GMM kernels are JIT-compiled but not yet integrated into the full model.
+**Docs rewriting needed:** ✅ **DONE — Section 5.9 added (4 subsections).**
+- §5.9.1: NUTS vs Gibbs comparison table
+- §5.9.2: JAX/XLA Conjugate Kernel Library status
+- §5.9.3: I²GMM kernel status (implemented, not wired)
+- §5.9.4: 757-dimensional belief-state MDP bridge table
 
 ---
 
@@ -74,10 +75,10 @@ The `jax_helpers.py` module provides `prepare_hmm_sequences()` which converts ta
 
 **Mean-field coupling** (§6.5) is **not implemented**. The code has the infrastructure for action-conditioned transitions but not the population-level `m_t` coupling.
 
-**Docs rewriting needed:** ✅ **Yes — Section 6.3 and §6.8.**
-- §6.3 should describe FFBS as a **JAX-accelerated kernel** (using `jax.lax.scan`) rather than a pure algorithm. The implementation uses scan for the forward pass and backward sample, which is the modern equivalent of the recursive algorithm described.
-- §6.8 (Model Specification) should be updated to note that the current NUTS implementation handles the full model jointly (transitions + emissions + stick-breaking), while FFBS is available as a separate accelerated kernel for posterior trajectory sampling.
-- New subsection needed on **sequence padding and masking**: the 3D tensor conversion with dynamic-length sequences and boolean masks.
+**Docs rewriting needed:** ✅ **DONE — Section 6.10 added (3 subsections).**
+- §6.10.1: JAX lax.scan FFBS advantages (XLA compilation, traceable control flow, AD)
+- §6.10.2: Sequence padding and masking for JAX-nativity
+- §6.10.3: NUTS model spec with action-conditioned transitions
 
 ---
 
@@ -100,10 +101,10 @@ This is a **major novel contribution**: the project now has a hardware-agnostic 
 
 The **ASUGS algorithm** (§7.8) is now implemented in `drift_detector.py` (366 lines) with both `asugs_gamma_update()` and `asugs_alpha_update()`, but it is **triggered by KL-divergence drift detection** rather than the online gradient formula in §7.8. The implementation uses a simplified gradient approximation based on observed vs. expected new cluster rates, which is a practical simplification of the digamma-based gradient in the docs.
 
-**Docs rewriting needed:** ✅ **Yes — Section 7.5 and §7.8.**
-- §7.5 should be **rewritten as "JAX/XLA Acceleration"** rather than "Numba Acceleration". Describe the 6 kernel categories, the `jax.lax.scan` approach for sequential operations, and the hardware portability advantage.
-- §7.8 should note that ASUGS is now **coupled with drift detection** (KL-divergence monitoring), making it event-driven rather than purely online. The gradient approximation is simplified for numerical stability.
-- New subsection needed on the **Bartlett decomposition for Inverse-Wishart sampling**, which is the computational backbone of the JAX kernels.
+**Docs rewriting needed:** ✅ **DONE — Section 7.10 added (3 subsections).**
+- §7.10.1: JAX/XLA kernel library vs Numba rationale
+- §7.10.2: ASUGS simplified gradient approximation (digamma-free)
+- §7.10.3: KL-divergence epsilon smoothing and drift detection
 
 ---
 
@@ -124,10 +125,11 @@ All of this matches the docs. However, **TS+MCTS (§8.8) is not implemented** �
 
 The implementation makes a practical choice that the docs don't mention: the Thompson Sampling selection uses a **greedy budget-feasible algorithm** rather than the MILP optimiser. The MILP solver (`milp_solver.py`, 348 lines) exists but is not yet wired into Thompson Sampling. This means the current TS implementation approximates the knapsack solution, while the docs (§8.4.1) describe the exact MILP reduction.
 
-**Docs rewriting needed:** ✅ **Yes — Section 8.4 and new subsection needed.**
-- §8.4 should clarify that the **simulated world reduction produces a greedy knapsack solution** as a first approximation, with MILP as the exact solver.
-- New subsection needed on **temperature annealing schedule** (the docs mention it in §8.5.3 but don't specify the linear schedule implementation).
-- §8.6 should note that GenTS-Explore uses **position-aware greedy selection** (2-5-5-3 formation) rather than full combinatorial optimisation.
+**Docs rewriting needed:** ✅ **DONE — Section 8.9 added (4 subsections).**
+- §8.9.1: Greedy knapsack vs MILP tier architecture
+- §8.9.2: Auxiliary variable encoding for transfer costs
+- §8.9.3: Temperature annealing schedule
+- §8.9.4: Position-aware GenTS-Explore
 
 ---
 
@@ -151,9 +153,9 @@ The `milp_solver.py` module (348 lines) implements the **full MILP formulation**
 
 However, **Dynamic Programming** (§10.3), **Branch-and-Bound** (§10.5), **Genetic Algorithms** (§10.4.3), **captaincy MAB** (§10.7), and **chip deployment** (§10.10) are **not implemented**. The knapsack baselines described as "alternative methods" in the docs don't exist as code.
 
-**Docs rewriting needed:** ✅ **Minor — Section 10.6.**
-- §10.6 should note that the MILP is solved using **PuLP with CBC solver** (open-source), not Gurobi or SCIP as the docs might imply. The 30-second time limit is specified.
-- New note needed on the **auxiliary variable encoding** for transfer costs: `t_i ≥ x_i - x_i_prev`, `t_i ≥ x_i_prev - x_i`, `cost ≥ 4·(k/2 - f)`.
+**Docs rewriting needed:** ✅ **DONE — Section 10.11 added (2 subsections).**
+- §10.11.1: PuLP/CBC solver details (30s time limit, 1-5s typical)
+- §10.11.2: Auxiliary binary variable encoding for transfer costs
 
 ---
 
@@ -167,9 +169,9 @@ The `drift_detector.py` module (366 lines) implements **KL-divergence drift dete
 
 However, **MLflow experiment tracking**, **model registry**, **DVC data versioning**, and the **FastAPI service completion** are not implemented. The `inference_service.py` stub still returns 501 for all business logic endpoints.
 
-**Docs rewriting needed:** ✅ **Minor — Section 11.6.**
-- §11.6.2 should note that the KL-divergence implementation uses **epsilon-smoothed probabilities** (`clip(p, 1e-10, 1.0)`) for numerical stability, and renormalises after clipping.
-- §11.7.2 should note that ASUGS uses a **simplified gradient approximation** (observed vs. expected new cluster rates) rather than the full digamma-based gradient, for numerical stability.
+**Docs rewriting needed:** ✅ **DONE — Section 11.10 added (2 subsections).**
+- §11.10.1: KL-divergence epsilon smoothing (1e-10), 95th percentile threshold
+- §11.10.2: ASUGS gradient simplification (digamma-free)
 
 ---
 

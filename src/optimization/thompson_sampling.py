@@ -5,10 +5,15 @@ Bayesian sequential decision-making for single-gameweek FPL optimisation.
 Samples from the posterior predictive distribution over player points,
 then solves a deterministic knapsack problem on the sampled values.
 
+Two tiers of knapsack solving:
+    1. **Greedy** (thompson_sampling_select): Fast, approximate, position-aware
+    2. **MILP** (thompson_sampling_milp): Exact, slower, full constraint handling
+
 Usage
 -----
->>> from src.optimization.thompson_sampling import thompson_sampling_select
->>> squad = thompson_sampling_select(belief_states, points_map, squad_size=15, ...)
+>>> from src.optimization.thompson_sampling import thompson_sampling_select, thompson_sampling_milp
+>>> squad = thompson_sampling_select(belief_states, points_map, ...)         # greedy
+>>> result = thompson_sampling_milp(player_pool, points_map, budget=100.0)  # exact
 """
 
 from __future__ import annotations
@@ -235,3 +240,99 @@ def compute_bayes_regret(
     selected squad's points.
     """
     return sum(oracle_points) - sum(selected_points)
+
+
+# ---------------------------------------------------------------------------
+# MILP-Backed Thompson Sampling (Production Tier)
+# ---------------------------------------------------------------------------
+
+
+def thompson_sampling_milp(
+    player_pool: dict[str, list],
+    points_map: dict[int, float],
+    budget: float,
+    current_squad: list[int] | None = None,
+    free_transfers: int = 1,
+    rng: np.random.Generator | None = None,
+    temperature: float = 1.0,
+) -> dict[str, Any]:
+    """
+    Thompson Sampling with MILP exact constraint handling.
+
+    This is the production-grade tier that combines:
+    1. Posterior predictive sampling (from NB distributions)
+    2. Temperature scaling for exploration control
+    3. MILP exact optimisation (all FPL constraints enforced)
+
+    Parameters
+    ----------
+    player_pool : dict
+        Must contain keys: 'ids', 'positions', 'prices', 'clubs'.
+        Each value is a list of length N (number of players).
+    points_map : dict
+        Mapping player_id → expected points (pre-computed from belief states).
+    budget : float
+        Total budget in £m.
+    current_squad : list[int] | None
+        Current squad player IDs (for transfer-aware optimisation).
+    free_transfers : int
+        Number of free transfers available.
+    rng : np.random.Generator
+    temperature : float
+        Temperature scaling factor (>1 = more exploration).
+
+    Returns
+    -------
+    dict with keys: squad, starting_xi, captain, vice_captain,
+         total_points, total_cost, transfer_cost (if current_squad provided).
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    ids = player_pool["ids"]
+    N = len(ids)
+
+    # Sample perturbed points for each player
+    sampled_points = {}
+    for pid in ids:
+        expected = points_map.get(pid, 5.0)
+        # Temperature scaling — ensure positive expected points
+        adjusted = max(expected / max(temperature, 0.1), 0.5)
+        r = max(adjusted * 2, 2.0)
+        nb = NBPointsPosterior(pid, r=r, expected_points=adjusted)
+        sampled_points[pid] = float(nb.sample(rng))
+
+    # Solve with MILP
+    from src.optimization.milp_solver import (
+        solve_squad_optimisation,
+        solve_with_transfers,
+    )
+
+    if current_squad is not None:
+        # Transfer-aware optimisation
+        result = solve_with_transfers(
+            player_ids=ids,
+            positions=player_pool["positions"],
+            prices=player_pool["prices"],
+            predicted_points=[sampled_points[pid] for pid in ids],
+            clubs=player_pool["clubs"],
+            budget=budget,
+            current_squad=current_squad,
+            free_transfers=free_transfers,
+        )
+    else:
+        # Squad selection without transfer costs
+        result = solve_squad_optimisation(
+            player_ids=ids,
+            positions=player_pool["positions"],
+            prices=player_pool["prices"],
+            predicted_points=[sampled_points[pid] for pid in ids],
+            clubs=player_pool["clubs"],
+            budget=budget,
+        )
+
+    logger.info(
+        "TS+MILP: squad=%d, captain=%d, points=%.1f",
+        len(result["squad"]), result["captain"], result["total_points"],
+    )
+    return result
