@@ -31,9 +31,12 @@
 | **JAX Kernels** | `src/utils/jax_kernels.py` | **24/24** | **465** | ✅ MVN, IW, NIW, FFBS, CRP |
 | **JAX Profiling** | `tests/test_jax_profiling.py` | **14/14** | **~320** | ✅ conjugate vs NUTS benchmarks |
 | **JAX Helpers** | `src/utils/jax_helpers.py` | ✅ | **45** | ✅ prepare_hmm_sequences |
-| **Thompson Sampling** | `src/optimization/thompson_sampling.py` | **11/11** | **237** | ✅ Step A + GenTS-Explore |
+| **Thompson Sampling** | `src/optimization/thompson_sampling.py` | **16/16** | **~340** | ✅ Step A + GenTS-Explore + MILP tier |
 | **MILP Solver** | `src/optimization/milp_solver.py` | **15/15** | **348** | ✅ piecewise transfer costs |
 | **Drift Detector** | `src/mlops/drift_detector.py` | **18/18** | **366** | ✅ KL drift + ASUGS |
+| **MCTS Node** | `src/optimization/mcts_node.py` | **14/14** | **~190** | ✅ UCB1, expand, backpropagate |
+| **MCTS Rollout** | `src/optimization/rollout.py` | ✅ (included) | **~120** | ✅ FFBS simulation + belief updates |
+| **TS+MCTS** | `src/optimization/ts_mcts.py` | ✅ (included) | **~300** | ✅ Step B: belief-state pruning, UCB1 |
 
 ### ⚠️ Failing Tests (~49 remaining — all mock/API issues, no code bugs)
 
@@ -48,7 +51,6 @@
 
 | Component | Chapter | Priority | Est. Lines |
 |---|---|---|---|
-| **MCTS (Step B)** | Ch. 8 §8.8 | **High** | ~800 |
 | **DDQN (Step C)** | Ch. 9 §9.5–9.8 | High | ~1,500 |
 | **Knapsack Baselines** (DP, B&B, Greedy) | Ch. 10 §10.3–10.5 | Medium | ~300 |
 | **Captaincy MAB** (LinUCB + Contextual TS) | Ch. 10 §10.7 | Medium | ~200 |
@@ -68,14 +70,15 @@
 - [x] Phase 2.2: Belief State Bridge (belief vectors, 757-dim assembly, NB posterior) — 33 tests
 - [x] Phase 2.3: JAX Profiling & Benchmarking (conjugate vs NUTS) — 14 tests
 - [x] Phase 2.4: Docs Overhaul (6 chapters updated with production notes)
-- [x] Phase 3.1: Thompson Sampling Step A (posterior sampling, temperature annealing) — 11 tests
+- [x] Phase 2.5: HDP Test Fixes (Windows encoding) — 2 files fixed
+- [x] Phase 3.1: Thompson Sampling Step A (posterior sampling, temperature annealing) — 16 tests
 - [x] Phase 3.1: MILP Constrained Optimiser (full FPL constraints, piecewise transfer costs) — 15 tests
+- [x] Phase 3.1: Wire MILP into TS Production Path — thompson_sampling_milp()
+- [x] Phase 3.2: MCTS Step B — ts_mcts.py, mcts_node.py, rollout.py — 14 tests
 - [x] Phase 5.1: KL Drift Detection + ASUGS (population drift, percentile thresholds) — 18 tests
-- [ ] Phase 2.5: Fix Remaining ~49 Test Failures
-- [ ] Phase 2.6: I²GMM Full Integration
-- [ ] Phase 3.2: MCTS Step B
-- [ ] Phase 3.3: Wire MILP into TS production path
-- [ ] Phase 3.4: Knapsack Baselines + Captaincy + Chip Optimiser
+- [ ] Phase 2.6: Fix Remaining ~49 Test Failures (mock/API issues)
+- [ ] Phase 2.7: I²GMM Full Integration
+- [ ] Phase 3.3: Knapsack Baselines + Captaincy + Chip Optimiser
 - [ ] Phase 4: DDQN Step C + Boltzmann Policy
 - [ ] Phase 4.2: Mean-Field Games
 - [ ] Phase 6: MLOps Completion (MLflow, FastAPI, DVC)
@@ -256,17 +259,17 @@ src/
 ├── utils/                        ✅ Utilities (complete)
 │   ├── jax_helpers.py            ✅
 │   └── jax_kernels.py            ✅ (24 tests: MVN, IW, NIW, FFBS, CRP)
-├── optimization/                 ⚠️ Decision Layer (partial)
-│   ├── thompson_sampling.py      ✅ (Step A, 11 tests)
+├── optimization/                 ✅ Decision Layer (Steps A + B complete)
+│   ├── thompson_sampling.py      ✅ (Step A, 16 tests + MILP tier)
 │   ├── milp_solver.py            ✅ (15 tests)
-│   ├── mcts_node.py              → Stage 2
-│   ├── rollout.py                → Stage 2
-│   ├── ts_mcts.py                → Stage 2
-│   ├── knapsack.py               → Stage 3
-│   ├── captaincy.py              → Stage 3
-│   ├── chip_optimizer.py         → Stage 3
-│   ├── ddqn/                     → Stage 4
-│   └── mfg/                      → Stage 5
+│   ├── mcts_node.py              ✅ (14 tests: UCB1, expand, backprop)
+│   ├── rollout.py                ✅ (included: FFBS simulation)
+│   ├── ts_mcts.py                ✅ (Step B, belief-state pruning)
+│   ├── knapsack.py               → Phase 3.3
+│   ├── captaincy.py              → Phase 3.3
+│   ├── chip_optimizer.py         → Phase 3.3
+│   ├── ddqn/                     → Phase 4
+│   └── mfg/                      → Phase 4.2
 ├── pipeline/                     ✅ (complete)
 │   └── data_pipeline.py          ✅
 └── mlops/                        ⚠️ MLOps Layer (partial)
