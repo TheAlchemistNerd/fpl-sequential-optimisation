@@ -151,7 +151,7 @@ class TestNormalWishartBaseMeasure:
         import numpyro
 
         # Inspect the model source — it must reference Wishart
-        source = Path(hdp_gmm.__file__).read_text()
+        source = Path(hdp_gmm.__file__).read_text(encoding='utf-8')
         assert "Wishart" in source or "LKJ" in source, (
             "Model must use a Wishart (or equivalent) distribution for the "
             "precision matrix Λ, not a diagonal approximation."
@@ -165,7 +165,7 @@ class TestNormalWishartBaseMeasure:
         co-varying within a form state).
         """
         from src.models import hdp_gmm
-        source = Path(hdp_gmm.__file__).read_text()
+        source = Path(hdp_gmm.__file__).read_text(encoding='utf-8')
 
         # The model should NOT use InverseGamma as the sole covariance prior
         # when D > 1 (diagonal-only is insufficient for correlations).
@@ -177,7 +177,7 @@ class TestNormalWishartBaseMeasure:
     def test_gaussian_component_models_mean(self):
         """The Gaussian component must model μ (center of the state)."""
         from src.models import hdp_gmm
-        source = Path(hdp_gmm.__file__).read_text()
+        source = Path(hdp_gmm.__file__).read_text(encoding='utf-8')
         assert "mu" in source.lower() or "mean" in source.lower(), (
             "Model must define a mean parameter μ for each cluster."
         )
@@ -185,7 +185,7 @@ class TestNormalWishartBaseMeasure:
     def test_wishart_component_models_precision(self):
         """The Wishart component must model Λ = Σ⁻¹ (shape/precision)."""
         from src.models import hdp_gmm
-        source = Path(hdp_gmm.__file__).read_text()
+        source = Path(hdp_gmm.__file__).read_text(encoding='utf-8')
         assert "precision" in source.lower() or "wishart" in source.lower(), (
             "Model must define a Wishart/precision component Λ."
         )
