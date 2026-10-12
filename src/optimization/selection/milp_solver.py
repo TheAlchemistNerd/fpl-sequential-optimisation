@@ -55,7 +55,7 @@ def _add_squad_constraints(
     prices: list[float],
     clubs: list[str],
     unique_clubs: list[str],
-    budget: float,
+    budget: float | None,
 ) -> None:
     """Add the squad, XI, formation, budget, and captaincy constraints."""
     prob += pulp.lpSum(x[i] for i in range(player_count)) == SQUAD_SIZE, "Squad_Size"
@@ -67,10 +67,11 @@ def _add_squad_constraints(
             f"Formation_{pos}",
         )
 
-    prob += (
-        pulp.lpSum(prices[i] * x[i] for i in range(player_count)) <= budget,
-        "Budget",
-    )
+    if budget is not None:
+        prob += (
+            pulp.lpSum(prices[i] * x[i] for i in range(player_count)) <= budget,
+            "Budget",
+        )
 
     for club in unique_clubs:
         club_indices = [i for i in range(player_count) if clubs[i] == club]
@@ -90,7 +91,8 @@ def _add_squad_constraints(
     gk_indices = [i for i in range(player_count) if positions[i] == "GK"]
     def_indices = [i for i in range(player_count) if positions[i] == "DEF"]
     fwd_indices = [i for i in range(player_count) if positions[i] == "FWD"]
-    prob += pulp.lpSum(s[i] for i in gk_indices) >= 1, "XI_Min_GK"
+    # FPL lineups contain exactly one starting goalkeeper.
+    prob += pulp.lpSum(s[i] for i in gk_indices) == 1, "XI_One_GK"
     prob += pulp.lpSum(s[i] for i in def_indices) >= 3, "XI_Min_DEF"
     prob += pulp.lpSum(s[i] for i in fwd_indices) >= 1, "XI_Min_FWD"
 
@@ -218,9 +220,11 @@ def solve_with_transfers(
     prices: list[float],
     predicted_points: list[float],
     clubs: list[str],
-    budget: float,
+    budget: float | None,
     current_squad: list[int],
     free_transfers: int = 1,
+    bank_balance: float | None = None,
+    current_sell_prices: dict[int, float] | None = None,
 ) -> dict[str, Any]:
     """
     Solve squad optimisation with piecewise linear transfer costs.
@@ -236,6 +240,13 @@ def solve_with_transfers(
         Current squad player IDs.
     free_transfers : int
         Number of free transfers available (typically 1 or 2).
+    bank_balance : float | None
+        Optional wallet balance for a sequential simulation. When supplied,
+        ``current_sell_prices`` is also required and ``budget`` should be
+        ``None``. The constraint then charges only incoming players and
+        credits the sale value of outgoing players.
+    current_sell_prices : dict[int, float] | None
+        Current FPL selling price for each player in ``current_squad``.
 
     Returns
     -------
@@ -245,12 +256,27 @@ def solve_with_transfers(
     """
     _check_pulp()
 
+    if (bank_balance is None) != (current_sell_prices is None):
+        raise ValueError("bank_balance and current_sell_prices must be supplied together")
+    if bank_balance is not None and budget is not None:
+        raise ValueError("Use budget=None with bank_balance/current_sell_prices")
+    if bank_balance is None and budget is None:
+        raise ValueError("A squad budget is required when wallet state is not supplied")
+
     if not player_ids:
         raise ValueError("Player pool is empty.")
 
     N = len(player_ids)
+    if len(set(player_ids)) != N:
+        raise ValueError("player_ids must be unique")
     unique_clubs = sorted(set(clubs))
     current_set = set(current_squad)
+    missing_current = current_set - set(player_ids)
+    if missing_current:
+        raise ValueError(
+            "Current squad players are missing from the candidate pool: "
+            f"{sorted(missing_current)}"
+        )
 
     # -- Problem definition ------------------------------------------------
     prob = pulp.LpProblem("FPL_Transfer_Optimisation", pulp.LpMaximize)
@@ -270,6 +296,25 @@ def solve_with_transfers(
         is_current = 1.0 if player_ids[i] in current_set else 0.0
         prob += t[i] >= x[i] - is_current, f"Transfer_LB_{i}"
         prob += t[i] >= is_current - x[i], f"Transfer_UB_{i}"
+
+    if bank_balance is not None and current_sell_prices is not None:
+        missing_sell_prices = current_set - set(current_sell_prices)
+        if missing_sell_prices:
+            raise ValueError(
+                "Missing current selling prices for players: "
+                f"{sorted(missing_sell_prices)}"
+            )
+        current_indices = [i for i, player_id in enumerate(player_ids) if player_id in current_set]
+        incoming_indices = [i for i, player_id in enumerate(player_ids) if player_id not in current_set]
+        prob += (
+            pulp.lpSum(prices[i] * x[i] for i in incoming_indices)
+            <= bank_balance
+            + pulp.lpSum(
+                current_sell_prices[player_ids[i]] * (1 - x[i])
+                for i in current_indices
+            ),
+            "Transfer_Wallet_Balance",
+        )
 
     # Total transfers
     k = pulp.lpSum(t[i] for i in range(N)) / 2

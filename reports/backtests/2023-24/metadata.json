@@ -1,0 +1,27 @@
+{
+  "season": "2023-24",
+  "strategies": [
+    "hold",
+    "form_milp",
+    "xg_milp",
+    "thompson_nb_milp",
+    "random_valid"
+  ],
+  "seeds": [
+    42
+  ],
+  "first_gameweek": 1,
+  "last_gameweek": 38,
+  "lookback_gameweeks": 5,
+  "max_stale_gameweeks": 5,
+  "starting_budget_tenths": 1000,
+  "free_transfer_cap": 2,
+  "dataset_sha256": "e9c09c8856f1c86b4f920f46ddd5033af83409439dfda53be925df2a3e7c8a9e",
+  "caveats": [
+    "Vaastav merged data does not contain official deadline availability snapshots.",
+    "The latest pre-GW row proxies each player market price and candidate eligibility.",
+    "Purchase prices and bank are simulated; historical manager ownership is not replayed.",
+    "The xGI challenger is a simple expected-points proxy, not a trained points model.",
+    "The Thompson challenger uses the repository's heuristic NB sampling, not thesis HDP/MCMC."
+  ]
+}

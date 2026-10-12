@@ -196,7 +196,7 @@ class TestStartingXIAndCaptaincy:
             sample_player_pool["positions"][sample_player_pool["ids"].index(pid)]
             for pid in result["starting_xi"]
         ]
-        assert xi_positions.count("GK") >= 1
+        assert xi_positions.count("GK") == 1
         assert xi_positions.count("DEF") >= 3
         assert xi_positions.count("FWD") >= 1
 
@@ -329,6 +329,28 @@ class TestTransferCosts:
         # Should keep most of current squad since they're high-value
         overlap = len(set(result["squad"]) & set(current_squad))
         assert overlap >= 10  # At least 10 retained
+
+    def test_wallet_prevents_unaffordable_incoming_transfers(self):
+        from src.optimization.selection.milp_solver import solve_with_transfers
+
+        positions = ["GK"] * 4 + ["DEF"] * 8 + ["MID"] * 10 + ["FWD"] * 8
+        ids = list(range(1, len(positions) + 1))
+        current_squad = [1, 2, 5, 6, 7, 8, 9, 13, 14, 15, 16, 17, 23, 24, 25]
+        prices = [4.5 if pid in current_squad else 5.5 for pid in ids]
+        result = solve_with_transfers(
+            player_ids=ids,
+            positions=positions,
+            prices=prices,
+            predicted_points=[1.0 if pid in current_squad else 30.0 for pid in ids],
+            clubs=[f"Club_{pid}" for pid in ids],
+            budget=None,
+            current_squad=current_squad,
+            free_transfers=2,
+            bank_balance=0.5,
+            current_sell_prices={pid: 4.5 for pid in current_squad},
+        )
+        assert result["squad"] == current_squad
+        assert result["n_transfers"] == 0
 
 
 # ===========================================================================

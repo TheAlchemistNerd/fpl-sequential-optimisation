@@ -1,0 +1,6 @@
+season,seed,strategy,total_net_points,total_gross_points,total_transfer_hits,total_transfers,mean_weekly_points,gameweeks
+2023-24,42,xg_milp,2008.0,2036.0,28,45,52.8421052631579,38
+2023-24,42,form_milp,1937.0,2025.0,88,60,50.973684210526315,38
+2023-24,42,thompson_nb_milp,1124.0,1712.0,588,185,29.57894736842105,38
+2023-24,42,hold,728.0,728.0,0,0,19.157894736842106,38
+2023-24,42,random_valid,-103.0,625.0,728,220,-2.710526315789474,38

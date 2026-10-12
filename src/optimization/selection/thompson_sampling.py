@@ -250,11 +250,13 @@ def compute_bayes_regret(
 def thompson_sampling_milp(
     player_pool: dict[str, list],
     points_map: dict[int, float],
-    budget: float,
+    budget: float | None,
     current_squad: list[int] | None = None,
     free_transfers: int = 1,
     rng: np.random.Generator | None = None,
     temperature: float = 1.0,
+    bank_balance: float | None = None,
+    current_sell_prices: dict[int, float] | None = None,
 ) -> dict[str, Any]:
     """
     Thompson Sampling with MILP exact constraint handling.
@@ -319,6 +321,8 @@ def thompson_sampling_milp(
             budget=budget,
             current_squad=current_squad,
             free_transfers=free_transfers,
+            bank_balance=bank_balance,
+            current_sell_prices=current_sell_prices,
         )
     else:
         # Squad selection without transfer costs
