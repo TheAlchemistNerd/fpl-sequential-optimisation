@@ -19,7 +19,7 @@ from typing import Any
 import numpy as np
 
 from src.models.belief_state import assemble_757_state, BeliefState
-from src.optimization.milp_solver import solve_squad_optimisation, solve_with_transfers
+from src.optimization.selection.milp_solver import solve_squad_optimisation, solve_with_transfers
 
 logger = logging.getLogger(__name__)
 

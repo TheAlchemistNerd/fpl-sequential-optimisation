@@ -71,8 +71,10 @@ def hdp_poisson_gamma_model(
             pi_raw = numpyro.sample("pi_raw", dist.Beta(1.0, alpha))
 
     # -- Poisson rate parameters (Gamma base measure) ------------------------
-    with numpyro.plate("components", truncation):
-        with numpyro.plate("events", E):
+    # Nest events outside components so NumPyro's rightmost plate dimensions
+    # produce lambda with shape (components, events), as used below.
+    with numpyro.plate("events", E):
+        with numpyro.plate("components", truncation):
             lam = numpyro.sample(
                 "lambda",
                 dist.Gamma(alpha_0, beta_0),

@@ -17,7 +17,7 @@ class TestLinUCBArm:
     """Validate individual LinUCB arm."""
 
     def test_initialization(self):
-        from src.optimization.captaincy import LinUCBArm
+        from src.optimization.selection.captaincy import LinUCBArm
         arm = LinUCBArm(d=5)
         assert arm.A.shape == (5, 5)
         assert arm.b.shape == (5,)
@@ -26,7 +26,7 @@ class TestLinUCBArm:
         assert np.allclose(arm.A, np.eye(5))
 
     def test_update_changes_posterior(self):
-        from src.optimization.captaincy import LinUCBArm
+        from src.optimization.selection.captaincy import LinUCBArm
         arm = LinUCBArm(d=3)
         context = np.array([1.0, 2.0, 3.0])
         arm.update(context, reward=10.0)
@@ -36,7 +36,7 @@ class TestLinUCBArm:
         assert not np.allclose(arm.mu, np.zeros(3))
 
     def test_ucb_score_with_exploration(self):
-        from src.optimization.captaincy import LinUCBArm
+        from src.optimization.selection.captaincy import LinUCBArm
         arm = LinUCBArm(d=3)
         context = np.array([1.0, 0.0, 0.0])
         # Fresh arm should have high uncertainty
@@ -44,7 +44,7 @@ class TestLinUCBArm:
         assert score > 0  # Uncertainty bonus ensures positive score
 
     def test_ucb_score_converges(self):
-        from src.optimization.captaincy import LinUCBArm
+        from src.optimization.selection.captaincy import LinUCBArm
         arm = LinUCBArm(d=3)
         context = np.array([1.0, 0.0, 0.0])
         # Simulate many observations
@@ -61,7 +61,7 @@ class TestCaptaincyBandit:
     @pytest.fixture
     def simple_bandit(self):
         """11 candidates with 10-dim context."""
-        from src.optimization.captaincy import CaptaincyBandit
+        from src.optimization.selection.captaincy import CaptaincyBandit
         return CaptaincyBandit(n_candidates=11, context_dim=10, alpha=1.0)
 
     def test_select_linucb_returns_valid_index(self, simple_bandit):
@@ -95,7 +95,7 @@ class TestCaptaincyBandit:
 
     def test_linucb_prefers_higher_reward(self):
         """After many observations, LinUCB should prefer the better arm."""
-        from src.optimization.captaincy import CaptaincyBandit
+        from src.optimization.selection.captaincy import CaptaincyBandit
         bandit = CaptaincyBandit(n_candidates=3, context_dim=5, alpha=0.1)
         contexts = np.array([
             [1.0, 0.0, 0.0, 0.0, 0.0],
@@ -113,7 +113,7 @@ class TestCaptaincyBandit:
 
     def test_thompson_sampling_exploration(self):
         """Thompson Sampling should explore different arms."""
-        from src.optimization.captaincy import CaptaincyBandit
+        from src.optimization.selection.captaincy import CaptaincyBandit
         bandit = CaptaincyBandit(n_candidates=3, context_dim=5, alpha=0.1)
         contexts = np.array([
             [1.0, 0.0, 0.0, 0.0, 0.0],

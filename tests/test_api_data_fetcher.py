@@ -299,12 +299,11 @@ class TestFetchAllData:
     @patch("src.api.data_fetcher.get_bootstrap_data")
     @patch("src.api.data_fetcher.get_fixture_data")
     @patch("src.api.data_fetcher.get_gameweek_data")
-    @patch("src.api.data_fetcher._save_json")
     def test_fetch_all_data_calls_all_fetchers(
-        self, mock_save, mock_gw_data, mock_fixtures, mock_bootstrap, mock_settings
+        self, mock_gw_data, mock_fixtures, mock_bootstrap, mock_settings, tmp_path
     ):
         from src.api.data_fetcher import fetch_all_data
-        mock_settings.DATA_DIR = Path("/tmp/fpl_test")
+        mock_settings.DATA_DIR = tmp_path / "fpl_test"
         mock_settings.FPL_TEAM_ID = None  # Skip protected data
 
         mock_bootstrap.return_value = (pd.DataFrame(), pd.DataFrame())
@@ -316,7 +315,12 @@ class TestFetchAllData:
         mock_bootstrap.assert_called_once()
         mock_fixtures.assert_called_once()
         mock_gw_data.assert_called_once_with(1)
-        assert mock_save.call_count >= 3  # At least 3 CSVs saved
+        assert {
+            "fpl_players.csv",
+            "fpl_teams.csv",
+            "fpl_fixtures.csv",
+            "fpl_gameweek_data.csv",
+        } <= {path.name for path in mock_settings.DATA_DIR.iterdir()}
 
     @patch("src.api.data_fetcher.settings")
     @patch("src.api.data_fetcher.get_bootstrap_data")
@@ -363,12 +367,13 @@ class TestHelperFunctions:
         with patch("builtins.open", mock_file):
             with patch("src.api.data_fetcher.log"):
                 _save_json(data, Path("/tmp/test.json"))
-                # Check that json.dump was called with indent=2
                 handle = mock_file()
-                handle.write.assert_called_once()
-                written = handle.write.call_args[0][0]
+                written = "".join(
+                    call.args[0] for call in handle.write.call_args_list
+                )
                 parsed = json.loads(written)
                 assert parsed == data
+                assert written == '{\n  "key": "value"\n}'
 
 
 # ===========================================================================

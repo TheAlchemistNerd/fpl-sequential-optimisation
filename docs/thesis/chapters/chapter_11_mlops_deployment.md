@@ -96,49 +96,15 @@ If all checks pass:
 
 ### 11.4.1 HDP-HMM MCMC Pipeline
 
-After data ingestion, the HDP-HMM model is updated with the new gameweek's data:
-
-```
-Algorithm: HDP-HMM Model Update
-Input: Latest feature matrix X, player IDs, previous posterior samples
-Output: Updated posterior samples, convergence diagnostics
-
-Stage 1: Load Data
-    X ← read_versioned_csv(data_version)
-    scaler ← load_saved_scaler(training_version)
-    X_standardised ← scaler.transform(X)
-
-Stage 2: Run MCMC
-    If previous_posterior exists:
-        Initialise MCMC chain at previous posterior mean
-        num_warmup ← reduced (warm start)
-    Else:
-        Initialise MCMC chain from priors
-        num_warmup ← full
-
-    Run NUTS sampler via NumPyro:
-        num_warmup, num_samples, num_chains=4
-        dense_mass=True
-
-Stage 3: Check Convergence
-    For each parameter:
-        r_hat ← gelman_rubin(chains)
-        ess ← effective_sample_size(chains)
-    If max(r_hat) > 1.01:
-        Flag warning, potentially re-run
-
-Stage 4: Save Artefacts
-    Store posterior samples, convergence diagnostics, metadata
-    Register in model registry with data version tag
-```
+After ingestion, the pipeline loads the versioned feature matrix and its saved scaler, then standardises the new observations. It initialises from the previous posterior mean with reduced warmup when available, or from the prior with full warmup otherwise. NumPyro runs NUTS with the configuration in Chapter 7, Section 7.4; the pipeline computes the $\hat{R}$ and ESS diagnostics described in Section 7.7 and flags a warning when the maximum $\hat{R}$ exceeds 1.01. Posterior samples, diagnostics, and metadata are stored in the model registry with the data-version tag.
 
 ### 11.4.2 Bayesian Updating
 
-Rather than re-running the MCMC chain from scratch, a **Bayesian update** is performed: the posterior from the previous gameweek becomes the prior for the current gameweek:
+The sequential Bayesian target uses the preceding gameweek's posterior as the current prior:
 
 $$P(\theta \mid \mathcal{D}_{t}) \propto P(x_t \mid \theta) \cdot P(\theta \mid \mathcal{D}_{t-1}).$$
 
-In practice, this is implemented by initialising the MCMC chain at the previous posterior's mean and reducing the number of warmup steps. This is computationally much more efficient than full retraining.
+The pipeline operationalises this target by initialising at the previous posterior mean and reducing warmup steps (Section 11.4.1); this is a warm-start approximation, not an exact posterior update. Its runtime benefit remains to be measured.
 
 ### 11.4.3 DDQN Retraining
 
@@ -197,15 +163,15 @@ Stage 1: Load Latest Models
     ddqn_weights ← load_from_registry("ddqn/Production")  // if using DDQN
 
 Stage 2: Compute Belief States
-    belief_states ← run_hdp_hmm_inference(latest_data, hdp_hmm_posterior)
+    belief_states ← infer_from(latest_data, hdp_hmm_posterior)  // outputs: Chapter 7, Section 7.9.1
 
 Stage 3: Run Decision Engine
     If league_type == "classical":
-        recommendations ← run_mfg_engine(belief_states)
+        recommendations ← run_mfg_engine(belief_states)  // formulation: Chapter 10, Section 10.10
     Else if league_type == "draft":
-        recommendations ← run_mfc_engine(belief_states)
+        recommendations ← run_mfc_engine(belief_states)  // formulation: Chapter 10, Section 10.11
     Else:
-        recommendations ← run_thompson_sampling(belief_states)
+        recommendations ← run_thompson_sampling(belief_states)  // method: Chapter 9
 
 Stage 4: Solve MILP
     transfers, lineup, captain, chip ← solve_constrained_opt(recommendations)
@@ -230,7 +196,7 @@ Runtime:
     Health check: GET /health → 200 OK
 ```
 
-The container is deployed to any environment that supports container runtimes (e.g., a local server, a cloud VM, or a managed container platform). For redundancy, two or more replicas can be run behind a simple load balancer.
+The proposed container design targets environments that support container runtimes (e.g., a local server, a cloud VM, or a managed container platform). For redundancy, two or more replicas could run behind a simple load balancer.
 
 ## 11.6 Model Monitoring and Drift Detection
 
@@ -301,20 +267,20 @@ The model is retrained immediately when a trigger condition is met:
 
 ### 11.7.3 Full vs. Incremental Retraining
 
-- **Incremental update**: The MCMC chain is continued from the previous posterior with the new data. Fast (minutes), suitable for minor distribution shifts.
-- **Full retrain**: The MCMC chain is reinitialised from scratch using all available data. Slow (hours), suitable for major distribution shifts (e.g., new season, rule changes).
+- **Incremental update**: The MCMC chain is continued from the previous posterior with the new data. The planning estimate is minutes; benchmark this runtime for minor distribution shifts.
+- **Full retrain**: The MCMC chain is reinitialised from scratch using all available data. The planning estimate is hours; benchmark this runtime for major distribution shifts (e.g., new season, rule changes).
 
-The system automatically chooses the appropriate retraining mode based on the trigger.
+The proposed orchestrator would choose the appropriate retraining mode based on the trigger.
 
 ## 11.8 Computational Acceleration
 
 ### 11.8.1 GPU Acceleration
 
-The NumPyro MCMC pipeline leverages GPU acceleration for the NUTS sampler. On a modern GPU, the NUTS sampler achieves a **5–10x speedup** over CPU-only execution, reducing the MCMC runtime from hours to minutes.
+The proposed NumPyro MCMC benchmark compares GPU acceleration for the NUTS sampler against CPU-only execution. The draft target is a **5–10x speedup**, to be verified and reported with the hardware and runtime in Chapter 12, Section 12.9; no measured result is presented here.
 
 ### 11.8.2 TPU Support
 
-For larger-scale experiments, the pipeline supports TPU backends via JAX. TPUs are particularly effective for the vectorised operations in the HDP-HMM's FFBS algorithm, achieving up to **20x speedup** over single-GPU execution.
+For larger-scale experiments, the proposed pipeline can use TPU backends via JAX. A benchmark would compare vectorised HDP-HMM FFBS on a TPU against single-GPU execution; the draft's **20x speedup** is a hypothesis to test, not a measured result.
 
 ## 11.9 Reproducibility and Experimentation
 
@@ -357,16 +323,8 @@ The drift threshold is computed as the **95th percentile** of historical drift v
 
 ### 11.10.2 ASUGS Gradient Simplification
 
-The ASUGS online update (§11.7.2) uses a simplified gradient approximation that avoids the digamma function $\psi(\cdot)$, which can be numerically unstable for large arguments. The approximation replaces the exact gradient:
-
-$$\frac{\partial}{\partial \gamma} \log p(z_n \mid z_{1:n-1}, \gamma) = \frac{1}{\gamma + n - 1} - \psi(\gamma + n - 1) + \psi(\gamma),$$
-
-with a simpler form based on the difference between observed and expected new cluster rates:
-
-$$\text{gradient} \approx \frac{\min(K/n, 1) - \gamma / (\gamma + n - 1)}{\gamma + n - 1}.$$
-
-This approximation is algebraically equivalent to the first-order Taylor expansion of the digamma-based gradient and is numerically stable for all $\gamma > 0$. The step size follows the standard schedule $\eta_n = 1/n$.
+The ASUGS update uses the simplified gradient approximation defined in Chapter 7, Section 7.10.2, in place of the digamma-based gradient in Section 7.8. Its step-size schedule is specified there as well (for example, $\eta_n = 1/n$); the deployment procedure applies that update when the configured drift trigger fires (§11.7.2).
 
 ## 11.11 Summary
 
-This chapter has presented the complete MLOps pipeline for the FPL sequential optimisation system. A workflow orchestrator manages the data ingestion and model updating workflow, ensuring timely execution after each gameweek. Data versioning ensures full reproducibility. An experiment registry tracks models, metrics, and artefacts. The prediction service, containerised for portability, exposes an API for generating recommendations. KL-divergence drift detection monitors the belief state distributions for concept drift, triggering automated retraining when necessary. GPU/TPU acceleration reduces MCMC runtime from hours to minutes. The system is designed to be platform-agnostic, deployable to any environment that supports container runtimes.
+This chapter sets out a proposed MLOps pipeline for the FPL sequential optimisation system. A workflow orchestrator would manage data ingestion and model updating after each gameweek. Data versioning and an experiment registry are specified to support reproducibility and artefact tracking. The proposed prediction service can be containerised and expose an API for recommendations. KL-divergence monitoring can trigger retraining when configured conditions are met. GPU/TPU acceleration and incremental versus full retraining require runtime benchmarks; Chapter 12, Section 12.9 is planned to report those measurements. The deployment design is platform-agnostic and targets environments that support container runtimes.

@@ -7,7 +7,7 @@ transfer sequences, and selects the action with the highest visit count.
 
 Usage
 -----
->>> from src.optimization.ts_mcts import ts_mcts_select
+>>> from src.optimization.planning.ts_mcts import ts_mcts_select
 >>> result = ts_mcts_select(player_pool, current_squad, belief_states, ...)
 """
 
@@ -19,8 +19,8 @@ from typing import Any
 import numpy as np
 
 from src.models.belief_state import NBPointsPosterior
-from src.optimization.mcts_node import MCTSNode
-from src.optimization.rollout import rollout
+from src.optimization.planning.mcts_node import MCTSNode
+from src.optimization.planning.rollout import rollout
 
 logger = logging.getLogger(__name__)
 

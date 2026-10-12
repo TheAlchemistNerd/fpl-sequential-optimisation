@@ -107,26 +107,27 @@ class TestFeatureEngineering:
     """Validate feature engineering from CSV data."""
 
     @patch("src.pipeline.data_pipeline.settings")
-    def test_engineer_features_returns_dataframe(self, mock_settings, mock_csv_data):
+    def test_engineer_features_returns_numeric_feature_matrix(
+        self, mock_settings, mock_csv_data
+    ):
         from src.pipeline import data_pipeline
         mock_settings.DATA_DIR = mock_csv_data
 
         result = data_pipeline.engineer_features()
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 4  # 4 rows from mock data
-        assert "full_name" in result.columns
+        assert {"goals_scored_per_90", "assists_per_90", "Form_3", "Form_5", "Form_10"} <= set(result.columns)
+        assert all(pd.api.types.is_numeric_dtype(dtype) for dtype in result.dtypes)
 
     @patch("src.pipeline.data_pipeline.settings")
-    def test_engineer_features_merges_player_data(self, mock_settings, mock_csv_data):
+    def test_engineer_features_computes_form_per_player(self, mock_settings, mock_csv_data):
         from src.pipeline import data_pipeline
         mock_settings.DATA_DIR = mock_csv_data
 
         result = data_pipeline.engineer_features()
-        # Should have merged player names
-        assert "full_name" in result.columns
-        # Check that names are correct
-        assert "Mohamed Salah" in result["full_name"].values
-        assert "Virgil van Dijk" in result["full_name"].values
+        # Player metadata is used during engineering; the returned matrix keeps
+        # only modelling features, including per-player rolling form.
+        assert result["Form_3"].tolist() == [12.0, 10.0, 6.0, 8.0]
 
     @patch("src.pipeline.data_pipeline.settings")
     def test_engineer_features_computes_rolling_averages(self, mock_settings, mock_csv_data):
@@ -134,11 +135,9 @@ class TestFeatureEngineering:
         mock_settings.DATA_DIR = mock_csv_data
 
         result = data_pipeline.engineer_features()
-        # Should have rolling columns
-        assert "total_points_roll_3" in result.columns
-        assert "minutes_roll_3" in result.columns
-        # Check values are computed
-        assert result["total_points_roll_3"].notna().any()
+        assert {"Form_3", "Form_5", "Form_10"} <= set(result.columns)
+        assert result["Form_3"].notna().all()
+        assert result["Form_3"].tolist() == [12.0, 10.0, 6.0, 8.0]
 
     @patch("src.pipeline.data_pipeline.settings")
     def test_engineer_features_handles_missing_stats_column(self, mock_settings, tmp_path):
@@ -151,6 +150,7 @@ class TestFeatureEngineering:
             "id": [1, 2],
             "gameweek": [1, 1],
             "total_points": [12, 6],
+            "minutes": [90, 90],
         })
         gw_data.to_csv(data_dir / "fpl_gameweek_data.csv", index=False)
 
@@ -166,6 +166,7 @@ class TestFeatureEngineering:
         mock_settings.DATA_DIR = data_dir
         result = data_pipeline.engineer_features()
         assert isinstance(result, pd.DataFrame)
+        assert "Form_3" in result.columns
 
     @patch("src.pipeline.data_pipeline.settings")
     def test_engineer_features_handles_string_stats_column(self, mock_settings, tmp_path):
@@ -178,7 +179,7 @@ class TestFeatureEngineering:
             "id": [1],
             "gameweek": [1],
             "total_points": [12],
-            "stats": ['{"goals_scored": 1, "assists": 1}'],
+            "stats": ['{"goals_scored": 1, "assists": 1, "minutes": 90}'],
         })
         gw_data.to_csv(data_dir / "fpl_gameweek_data.csv", index=False)
 
@@ -194,8 +195,8 @@ class TestFeatureEngineering:
         mock_settings.DATA_DIR = data_dir
         result = data_pipeline.engineer_features()
         assert isinstance(result, pd.DataFrame)
-        # Stats should be expanded
-        assert "goals_scored" in result.columns or "assists" in result.columns
+        assert result["goals_scored_per_90"].tolist() == [1.0]
+        assert result["assists_per_90"].tolist() == [1.0]
 
 
 # ===========================================================================
@@ -300,7 +301,7 @@ class TestEdgeCases:
         data_dir.mkdir()
 
         # Empty CSVs (just headers)
-        pd.DataFrame(columns=["id", "gameweek", "total_points"]).to_csv(
+        pd.DataFrame(columns=["id", "gameweek", "total_points", "minutes"]).to_csv(
             data_dir / "fpl_gameweek_data.csv", index=False
         )
         pd.DataFrame(columns=["id", "first_name", "second_name", "element_type", "team"]).to_csv(

@@ -1,5 +1,5 @@
 """
-Tests for src/optimization/thompson_sampling.py — Thompson Sampling (Step A).
+Tests for src/optimization/selection/thompson_sampling.py — Thompson Sampling (Step A).
 
 Tests cover:
     - Posterior predictive sampling (Negative-Binomial)
@@ -91,7 +91,7 @@ class TestThompsonSampling:
 
     def test_ts_returns_valid_squad(self, sample_belief_states):
         """Selected squad should satisfy basic constraints."""
-        from src.optimization.thompson_sampling import thompson_sampling_select
+        from src.optimization.selection.thompson_sampling import thompson_sampling_select
         rng = np.random.default_rng(42)
 
         # Mock point predictions for each player
@@ -111,7 +111,7 @@ class TestThompsonSampling:
 
     def test_ts_respects_budget(self, sample_belief_states):
         """Selected squad should not exceed budget."""
-        from src.optimization.thompson_sampling import thompson_sampling_select
+        from src.optimization.selection.thompson_sampling import thompson_sampling_select
         rng = np.random.default_rng(42)
         points_per_player = {pid: 10.0 for pid in range(1, 6)}
         price_map = {1: 15.0, 2: 12.0, 3: 8.0, 4: 5.0, 5: 10.0}
@@ -130,7 +130,7 @@ class TestThompsonSampling:
 
     def test_ts_prefers_high_value_players(self):
         """TS should preferentially select players with higher expected points."""
-        from src.optimization.thompson_sampling import thompson_sampling_select
+        from src.optimization.selection.thompson_sampling import thompson_sampling_select
         rng = np.random.default_rng(42)
 
         belief_states = {
@@ -170,7 +170,7 @@ class TestTemperatureScaling:
 
     def test_temperature_annealing_decreases(self):
         """Temperature should decrease over the season."""
-        from src.optimization.thompson_sampling import anneal_temperature
+        from src.optimization.selection.thompson_sampling import anneal_temperature
         T_init = 2.0
         T_final = 0.1
 
@@ -179,12 +179,12 @@ class TestTemperatureScaling:
         assert t_early > t_late
 
     def test_temperature_at_start_equals_init(self):
-        from src.optimization.thompson_sampling import anneal_temperature
+        from src.optimization.selection.thompson_sampling import anneal_temperature
         T = anneal_temperature(1, 38, 2.0, 0.1)
         assert T == pytest.approx(2.0, abs=0.1)
 
     def test_temperature_at_end_equals_final(self):
-        from src.optimization.thompson_sampling import anneal_temperature
+        from src.optimization.selection.thompson_sampling import anneal_temperature
         T = anneal_temperature(38, 38, 2.0, 0.1)
         assert T == pytest.approx(0.1, abs=0.1)
 
@@ -199,7 +199,7 @@ class TestGenTSExplore:
 
     def test_gents_explore_returns_valid_squad(self):
         """Initial squad should satisfy all FPL constraints."""
-        from src.optimization.thompson_sampling import gents_explore
+        from src.optimization.selection.thompson_sampling import gents_explore
         rng = np.random.default_rng(42)
 
         # Mock 20 players with different positions and prices
@@ -221,7 +221,7 @@ class TestGenTSExplore:
 
     def test_gents_explore_respects_position_constraints(self):
         """Squad should have correct position distribution (2-5-5-3)."""
-        from src.optimization.thompson_sampling import gents_explore
+        from src.optimization.selection.thompson_sampling import gents_explore
         rng = np.random.default_rng(42)
 
         n_gk, n_def, n_mid, n_fwd = 4, 8, 8, 4
@@ -282,7 +282,7 @@ class TestThompsonSamplingMILP:
 
     def test_ts_milp_returns_valid_squad(self, sample_player_pool):
         """MILP-backed TS should return a valid 15-player squad."""
-        from src.optimization.thompson_sampling import thompson_sampling_milp
+        from src.optimization.selection.thompson_sampling import thompson_sampling_milp
         rng = np.random.default_rng(42)
         result = thompson_sampling_milp(
             player_pool=sample_player_pool,
@@ -298,7 +298,7 @@ class TestThompsonSamplingMILP:
 
     def test_ts_milp_respects_budget(self, sample_player_pool):
         """MILP-backed TS should not exceed budget."""
-        from src.optimization.thompson_sampling import thompson_sampling_milp
+        from src.optimization.selection.thompson_sampling import thompson_sampling_milp
         rng = np.random.default_rng(42)
         result = thompson_sampling_milp(
             player_pool=sample_player_pool,
@@ -310,7 +310,7 @@ class TestThompsonSamplingMILP:
 
     def test_ts_milp_formation_valid(self, sample_player_pool):
         """MILP-backed TS should satisfy 2-5-5-3 formation."""
-        from src.optimization.thompson_sampling import thompson_sampling_milp
+        from src.optimization.selection.thompson_sampling import thompson_sampling_milp
         rng = np.random.default_rng(42)
         result = thompson_sampling_milp(
             player_pool=sample_player_pool,
@@ -329,7 +329,7 @@ class TestThompsonSamplingMILP:
 
     def test_ts_milp_with_transfers(self, sample_player_pool):
         """MILP-backed TS with current squad should account for transfer costs."""
-        from src.optimization.thompson_sampling import thompson_sampling_milp
+        from src.optimization.selection.thompson_sampling import thompson_sampling_milp
         rng = np.random.default_rng(42)
         current_squad = sample_player_pool["ids"][:15]
         result = thompson_sampling_milp(
@@ -345,7 +345,7 @@ class TestThompsonSamplingMILP:
 
     def test_ts_milp_temperature_effect(self, sample_player_pool):
         """High temperature should produce more diverse squads."""
-        from src.optimization.thompson_sampling import thompson_sampling_milp
+        from src.optimization.selection.thompson_sampling import thompson_sampling_milp
         rng = np.random.default_rng(42)
 
         result_low = thompson_sampling_milp(

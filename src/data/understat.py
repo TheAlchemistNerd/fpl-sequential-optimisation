@@ -64,7 +64,10 @@ def _extract_json_from_html(html: str, data_type: str) -> list[dict[str, Any]]:
         if match:
             raw = match.group(1)
             decoded = codecs.escape_decode(raw)[0].decode("utf-8")
-            return json.loads(decoded)  # type: ignore[no-any-return]
+            payload = json.loads(decoded)
+            if isinstance(payload, dict):
+                return [payload]
+            return payload  # type: ignore[no-any-return]
 
     raise ValueError(f"Could not find '{data_type}' in page HTML.")
 

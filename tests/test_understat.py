@@ -88,6 +88,14 @@ class TestJSONExtraction:
         assert result[0]["player_name"] == "Mohamed Salah"
         assert result[0]["xG"] == "15.5"
 
+    def test_extract_json_from_html_preserves_record_list(self):
+        from src.data.understat import _extract_json_from_html
+
+        html = '<script>var playersData = JSON.parse(\'[ {"id":"1"}, {"id":"2"} ]\')</script>'
+        result = _extract_json_from_html(html, "playersData")
+
+        assert result == [{"id": "1"}, {"id": "2"}]
+
     def test_extract_json_from_html_wrong_data_type(self, sample_understat_html):
         from src.data.understat import _extract_json_from_html
         with pytest.raises(ValueError, match="Could not find"):
@@ -309,11 +317,13 @@ class TestUnderstatPipeline:
     async def test_fetch_and_match(self, sample_understat_html, fpl_player_names):
         from src.data.understat import fetch_understat_season, match_understat_to_fpl
         mock_response = MagicMock()
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
         mock_response.text = AsyncMock(return_value=sample_understat_html)
         mock_response.raise_for_status = MagicMock()
 
         mock_session = MagicMock()
-        mock_session.get = AsyncMock(return_value=mock_response)
+        mock_session.get = MagicMock(return_value=mock_response)
 
         # Fetch
         df = await fetch_understat_season(mock_session, 2024)

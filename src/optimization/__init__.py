@@ -1,1 +1,1 @@
-"""Decision Layer — Thompson Sampling, MCTS, DDQN, MILP, MFG."""
+"""FPL selection, planning, and policy research modules."""

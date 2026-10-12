@@ -177,31 +177,21 @@ A single Gaussian cannot capture these sub-structures, which may lead the model 
 
 ### 5.5.2 The I²GMM Extension
 
-The **Infinite Mixture of Infinite Gaussian Mixtures (I²GMM)** (Yerebakan et al., 2014) addresses this by replacing each single Gaussian with an entire DPMG. The model has a two-level hierarchical DP prior:
+The **Infinite Mixture of Infinite Gaussian Mixtures (I²GMM)** (Yerebakan et al., 2014) replaces each single-Gaussian cluster with its own Gaussian DP mixture. Its higher-level DP draws meta-cluster parameters, and each meta-cluster defines the base measure for a lower-level DP over component means:
 
-**Top level (global profiles):**
+$$G \sim \mathrm{DP}(\gamma,H), \qquad H=\mathrm{NIW}(\mu_0,\Sigma_0,\kappa_0,m), \qquad (\mu_k,\Sigma_k) \sim G.$$
 
-$$G_0 \sim \text{DP}(\gamma, H).$$
+For each meta-cluster $k$, define $H_k=\mathcal{N}(\mu_k,\Sigma_k/\kappa_1)$ and draw $G_k\sim\mathrm{DP}(\eta,H_k)$. An observation assigned to meta-cluster $k$ draws a component mean $\mu_i\sim G_k$ and then $x_i\sim\mathcal{N}(\mu_i,\Sigma_k)$. Thus component means vary within the cluster while its covariance is shared; $\kappa_1$ controls within-cluster spread and $\kappa_0$ controls between-cluster spread.
 
-**Second level (within-profile mixtures):** For each top-level profile $k$:
-
-$$G_k \sim \text{DP}(\eta, G_0),$$
-
-where $\eta$ is a secondary concentration parameter controlling the number of sub-components within profile $k$.
-
-**Observation level:**
-
-$$\theta_{j,i} \sim G_{z_{j,i}}, \quad x_{j,i} \mid \theta_{j,i} \sim \mathcal{N}(\theta_{j,i}).$$
-
-Each top-level cluster $k$ is itself an infinite mixture of Gaussians, enabling it to capture multi-modal, skewed, or elongated shapes that a single Gaussian would fragment.
+Equivalently, $G=\sum_k\beta_k\delta_{(\mu_k,\Sigma_k)}$ with $\beta\sim\mathrm{GEM}(\gamma)$, while $G_k=\sum_m\pi_{k,m}\delta_{\mu_{k,m}}$ with $\pi_k\sim\mathrm{GEM}(\eta)$ and $\mu_{k,m}\sim H_k$. The generative assignments are $z_i\sim\mathrm{Categorical}(\beta)$, $c_i\sim\mathrm{Categorical}(\pi_{z_i})$, and $x_i\sim\mathcal{N}(\mu_{z_i,c_i},\Sigma_{z_i})$. The earlier generative pseudocode uses $\alpha$ for the within-profile concentration; here it is denoted $\eta$ to match the DP definition.
 
 ### 5.5.3 Collapsed Gibbs Sampler for I²GMM
 
 The collapsed Gibbs sampler for I²GMM has an additional layer:
 
-1. Sample top-level cluster assignments $z_{j,i}$ (as in HDP-GMM).
-2. Within each top-level cluster $k$, sample sub-component assignments $w_{j,i}$ from a second CRP with concentration $\eta$.
-3. Update sub-component parameters $(\mu_{k,w}, \Sigma_{k,w})$ from the NIW posterior.
+1. Sample each observation's within-cluster component assignment from the CRP associated with its cluster-specific DP.
+2. Sample component-to-meta-cluster assignments under the higher-level DP, allowing new clusters when supported by the posterior predictive probability.
+3. Update component means and shared meta-cluster covariance parameters from their conjugate posterior.
 
 The partial parallelisability of the collapsed Gibbs sampler (Yerebakan et al., 2014) enables scaling to large datasets, which is essential for the FPL problem with thousands of player-gameweek observations.
 
@@ -322,35 +312,15 @@ A "Creative Form" profile for a midfielder may exhibit:
 
 The Inverse-Wishart prior on $\Sigma_k$ regularises the covariance estimates, shrinking them towards the identity matrix when data is sparse. This prevents overfitting and ensures numerical stability.
 
-## 5.8 Advanced Representational Considerations: I²GMM
+## 5.10 Advanced Representational Considerations: I²GMM
 
-While the standard HDP-GMM provides a robust non-parametric foundation, certain domains exhibit within-cluster multi-modality (e.g., "Elite" performance profiles that differ significantly between Home and Away fixtures). To capture these nested structures without over-fragmenting the global state space, the **Infinite Mixture of Infinite Gaussian Mixtures (I²GMM)** extension is considered.
+The complete I²GMM treatment—including its motivation, two-level DP construction, stick-breaking representation, and collapsed Gibbs updates—is in Sections 5.5.1–5.5.3.
 
-### 5.8.1 Nested Chinese Restaurant Process
-
-The I²GMM introduces a secondary layer of stick-breaking. Each global cluster $k$ is itself an infinite mixture of sub-clusters.
-
-```
-Algorithm: I²GMM Generative Process
-1. Draw global weights β ~ GEM(γ)
-2. For each global cluster k:
-    a. Draw sub-cluster weights π_k ~ GEM(α)
-    b. For each sub-cluster m:
-        i. Draw atoms θ_{k,m} ~ H (Gaussian-Wishart)
-
-3. For each observation i:
-    a. Sample global cluster z_i ~ Categorical(β)
-    b. Sample sub-cluster c_i ~ Categorical(π_{z_i})
-    c. Sample data x_i ~ N(θ_{z_i, c_i})
-```
-
-This nested hierarchy allows the agent to maintain a single "Elite" Belief State while internalizing the multi-modal variations that drive performance variance.
-
-## 5.9 Production Implementation Notes
+## 5.11 Production Implementation Notes
 
 This section documents how the theoretical framework above is realised in the codebase, including design decisions, library choices, and the relationship between conjugate and gradient-based inference methods.
 
-### 5.9.1 NUTS vs. Collapsed Gibbs Sampling
+### 5.11.1 NUTS vs. Collapsed Gibbs Sampling
 
 The collapsed Gibbs sampler described in Section 5.4 exploits the NIW-Gaussian conjugacy to produce closed-form posterior updates. This is the **conceptual algorithm** — the one that makes the statistical structure transparent. In practice, the production implementation uses the **No-U-Turn Sampler (NUTS)** via NumPyro (§5.8), which treats the full joint posterior (stick-breaking weights, cluster parameters, assignments) as a single differentiable computation graph.
 
@@ -364,7 +334,7 @@ The collapsed Gibbs sampler described in Section 5.4 exploits the NIW-Gaussian c
 
 The NUTS approach is preferred for the **initial model development** because it requires no manual derivation of full conditionals and automatically handles the truncated stick-breaking construction. The collapsed Gibbs sampler remains available as a **JAX-accelerated kernel library** (`src/utils/jax_kernels.py`) for scenarios where conjugacy provides a significant speedup or where discrete assignments must be explicitly sampled.
 
-### 5.9.2 JAX/XLA Accelerated Conjugate Kernels
+### 5.11.2 JAX/XLA Accelerated Conjugate Kernels
 
 While the theoretical derivation in Section 5.4 presents the Gibbs sampler as a loop over observations, the production implementation (`src/utils/jax_kernels.py`) leverages **JAX/XLA** to compile these updates into efficient, hardware-agnostic kernels. This replaces the Numba-accelerated approach originally envisaged, providing native GPU/TPU support.
 
@@ -379,4 +349,4 @@ These kernels allow the conjugate steps to run on GPU/TPU, significantly reducin
 
 This chapter has presented the HDP-GMM with Gaussian-Wishart base measure in full mathematical detail. The NIW prior provides conjugacy for efficient posterior updates. The truncated stick-breaking construction enables practical implementation. The I²GMM extension addresses within-cluster multi-modality. Alternative base measures (Poisson-Gamma, Negative-Binomial) handle discrete count data and over-dispersed points. The belief state output provides a rich, probabilistic representation of player form. The NumPyro implementation leverages JAX's acceleration for scalable inference.
 
-The next chapter extends the HDP-GMM with a Hidden Markov Model layer, capturing the temporal dynamics of player form — not just which state a player is in, but how they transition between states over gameweeks.S
+The next chapter extends the HDP-GMM with a Hidden Markov Model layer, capturing the temporal dynamics of player form — not just which state a player is in, but how they transition between states over gameweeks.

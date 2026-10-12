@@ -22,7 +22,7 @@ class TestMCTSNode:
     """Validate MCTS tree node operations."""
 
     def test_node_creation(self):
-        from src.optimization.mcts_node import MCTSNode
+        from src.optimization.planning.mcts_node import MCTSNode
         node = MCTSNode(state={"squad": [1, 2, 3]})
         assert node.state == {"squad": [1, 2, 3]}
         assert node.visit_count == 0
@@ -31,7 +31,7 @@ class TestMCTSNode:
         assert node.is_fully_expanded  # No untried actions = fully expanded
 
     def test_ucb1_unvisited_returns_inf(self):
-        from src.optimization.mcts_node import MCTSNode
+        from src.optimization.planning.mcts_node import MCTSNode
         parent = MCTSNode(state={})
         child = MCTSNode(state={}, parent=parent)
         parent.children["a"] = child
@@ -39,7 +39,7 @@ class TestMCTSNode:
         assert child.ucb1() == float("inf")
 
     def test_ucb1_visited_returns_finite(self):
-        from src.optimization.mcts_node import MCTSNode
+        from src.optimization.planning.mcts_node import MCTSNode
         parent = MCTSNode(state={})
         parent.visit_count = 10
         child = MCTSNode(state={}, parent=parent)
@@ -52,7 +52,7 @@ class TestMCTSNode:
         assert ucb == pytest.approx(5.0 + 1.414 * np.sqrt(np.log(10) / 5), abs=0.01)
 
     def test_select_best_child(self):
-        from src.optimization.mcts_node import MCTSNode
+        from src.optimization.planning.mcts_node import MCTSNode
         parent = MCTSNode(state={})
         parent.visit_count = 100
         c1 = MCTSNode(state={}, parent=parent, visit_count=10, total_reward=50.0)
@@ -63,7 +63,7 @@ class TestMCTSNode:
         assert best is c1  # c1 has higher exploitation (5.0 vs 3.0)
 
     def test_expand(self):
-        from src.optimization.mcts_node import MCTSNode
+        from src.optimization.planning.mcts_node import MCTSNode
         node = MCTSNode(state={}, untried_actions=["a", "b", "c"])
         child = node.expand("b", {"new": "state"})
         assert "b" not in node.untried_actions
@@ -72,7 +72,7 @@ class TestMCTSNode:
         assert child.state == {"new": "state"}
 
     def test_backpropagate(self):
-        from src.optimization.mcts_node import MCTSNode
+        from src.optimization.planning.mcts_node import MCTSNode
         root = MCTSNode(state={})
         child = MCTSNode(state={}, parent=root)
         root.children["a"] = child
@@ -86,7 +86,7 @@ class TestMCTSNode:
         assert root.total_reward == pytest.approx(90.0)  # 100 * 0.9
 
     def test_repr(self):
-        from src.optimization.mcts_node import MCTSNode
+        from src.optimization.planning.mcts_node import MCTSNode
         node = MCTSNode(state={}, visit_count=5, total_reward=25.0)
         r = repr(node)
         assert "visits=5" in r
@@ -102,7 +102,7 @@ class TestRollout:
     """Validate forward simulation rollouts."""
 
     def test_simulate_gameweek_returns_points(self):
-        from src.optimization.rollout import simulate_gameweek
+        from src.optimization.planning.rollout import simulate_gameweek
         rng = np.random.default_rng(42)
         squad = [1, 2, 3]
         points_map = {1: 5.0, 2: 3.0, 3: 7.0}
@@ -114,7 +114,7 @@ class TestRollout:
         assert len(updated) == 3  # All players updated
 
     def test_simulate_gameweek_belief_update(self):
-        from src.optimization.rollout import simulate_gameweek
+        from src.optimization.planning.rollout import simulate_gameweek
         rng = np.random.default_rng(42)
         squad = [1]
         points_map = {1: 5.0}
@@ -126,7 +126,7 @@ class TestRollout:
         assert np.allclose(updated[1], [0.76, 0.24], atol=0.01)
 
     def test_rollout_multi_gameweek(self):
-        from src.optimization.rollout import rollout
+        from src.optimization.planning.rollout import rollout
         rng = np.random.default_rng(42)
         squad = [1, 2, 3]
         beliefs = {1: np.array([0.8, 0.2]), 2: np.array([0.5, 0.5]), 3: np.array([0.1, 0.9])}
@@ -175,7 +175,7 @@ class TestTSMCTS:
 
     def test_ts_mcts_returns_valid_result(self, sample_scenario):
         """TS+MCTS should return a valid result dict."""
-        from src.optimization.ts_mcts import ts_mcts_select
+        from src.optimization.planning.ts_mcts import ts_mcts_select
         rng = np.random.default_rng(42)
 
         result = ts_mcts_select(
@@ -196,7 +196,7 @@ class TestTSMCTS:
 
     def test_ts_mcts_best_action_is_dict(self, sample_scenario):
         """Best action should be a transfer action dict."""
-        from src.optimization.ts_mcts import ts_mcts_select
+        from src.optimization.planning.ts_mcts import ts_mcts_select
         rng = np.random.default_rng(42)
 
         result = ts_mcts_select(
@@ -213,7 +213,7 @@ class TestTSMCTS:
 
     def test_ts_mcts_no_transfer_action_exists(self, sample_scenario):
         """Should always include a no-transfer action."""
-        from src.optimization.ts_mcts import _generate_transfer_actions
+        from src.optimization.planning.ts_mcts import _generate_transfer_actions
         actions = _generate_transfer_actions(
             current_squad=sample_scenario["current_squad"],
             player_pool=sample_scenario["player_pool"],
@@ -224,7 +224,7 @@ class TestTSMCTS:
 
     def test_ts_mcts_action_pruning(self, sample_scenario):
         """Action space should be pruned to top-K candidates."""
-        from src.optimization.ts_mcts import _generate_transfer_actions
+        from src.optimization.planning.ts_mcts import _generate_transfer_actions
         actions = _generate_transfer_actions(
             current_squad=sample_scenario["current_squad"],
             player_pool=sample_scenario["player_pool"],

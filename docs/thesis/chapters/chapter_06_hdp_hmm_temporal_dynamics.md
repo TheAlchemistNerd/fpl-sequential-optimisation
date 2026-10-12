@@ -195,7 +195,7 @@ This provides a principled way to combine the HDP-HMM's learned transition dynam
 
 ## 6.5 Mean-Field Coupling in State Transitions
 
-### 5.5.1 Motivation
+### 6.5.1 Motivation
 
 In the classical FPL league (Section 1.3), the form dynamics of individual players are influenced by **population-level trends**. For example:
 
@@ -226,7 +226,7 @@ Estimating $\omega$ from the data provides a quantitative measure of how much of
 
 ## 6.6 Form Persistence and Transition Matrix Analysis
 
-### 5.6.1 Diagonal Dominance
+### 6.6.1 Diagonal Dominance
 
 Empirically, the transition matrices are expected to be **diagonally dominant**: $\pi_{k,k} > \pi_{k,\ell}$ for $\ell \neq k$. This reflects form persistence — players tend to remain in their current state.
 
@@ -328,13 +328,13 @@ The HDP-HMM is strictly more expressive than the HDP-GMM, at the cost of increas
 
 ## 6.10 Bridge to Reinforcement Learning: The Belief-State MDP
 
-The overarching purpose of the HDP-HMM is not merely to model historical form, but to provide a strictly principled input layer for the reinforcement learning agents developed in Chapter 9. The posterior samples drawn using MCMC compress the high-dimensional, noisy FPL statistics into a clean, probabilistic "Belief State" regarding each player's true latent form.
+The overarching purpose of the HDP-HMM is not merely to model historical form, but to provide a strictly principled input layer for the reinforcement learning agents developed in Chapter 10. The posterior samples drawn using MCMC compress the high-dimensional, noisy FPL statistics into a clean, probabilistic "Belief State" regarding each player's true latent form.
 
 By feeding this computed Belief State directly into the Double Deep Q-Network (DDQN) or Monte Carlo Tree Search (MCTS) agents, the underlying Partially Observable Markov Decision Process (POMDP) is effectively transformed into a computationally tractable **Belief-State MDP**. This ensures the decision-making engine strictly operates on posterior uncertainty rather than deterministic, point-estimated player features, naturally bridging the exact probabilistic models with deep reinforcement learning.
 
-## 6.10 Production Implementation Notes
+## 6.11 Production Implementation Notes
 
-### 6.10.1 JAX-Accelerated FFBS via `lax.scan`
+### 6.11.1 JAX-Accelerated FFBS via `lax.scan`
 
 The Forward-Filtering Backward-Sampling (FFBS) algorithm (§6.3) is computationally intensive due to the sequential nature of the filtering. The production implementation (`src/utils/jax_kernels.py`) replaces the Python loop with **JAX's `lax.scan` primitive**, which transforms the sequential recursion into a single XLA-compiled computation graph.
 
@@ -346,7 +346,7 @@ The forward pass (§6.3.2) is expressed as a scan over timesteps $t = 2, \ldots,
 
 Profiling tests (`tests/test_jax_profiling.py`) verify that the JAX-accelerated FFBS achieves 100% state recovery accuracy on sequences with deterministic transitions and well-separated emissions.
 
-### 6.10.2 Sequence Padding and Masking
+### 6.11.2 Sequence Padding and Masking
 
 The HDP-HMM model specification (§6.8) assumes a rectangular data tensor of shape $(P, T_{\max}, D)$, where $P$ is the number of players, $T_{\max}$ is the maximum sequence length, and $D$ is the feature dimensionality. In practice, players have different numbers of gameweek observations (some play all 38 gameweeks, others are substituted or injured). To accommodate variable-length sequences within JAX's requirement for static tensor shapes, the implementation employs **sequence padding with boolean masking**:
 
@@ -356,12 +356,12 @@ The HDP-HMM model specification (§6.8) assumes a rectangular data tensor of sha
 
 The sequence padding utility (`prepare_hmm_sequences` in `src/utils/jax_helpers.py`) handles this conversion transparently, accepting tabular data and returning padded tensors with masks.
 
-### 6.10.3 NUTS Model Specification with Action-Conditioned Transitions
+### 6.11.3 NUTS Model Specification with Action-Conditioned Transitions
 
 The NumPyro model function (`src/models/hdp_hmm.py`) implements the full HDP-HMM with action-conditioned transitions as a **joint probabilistic program**. The transition tensor $\boldsymbol{\pi}_k(a)$ is sampled from a Dirichlet distribution parameterised by the global stick-breaking weights $\boldsymbol{\beta}$ and concentration $\alpha$, conditioned on the action vector $a_t$. The model handles 3D sequence data $(P, T, D)$ with a masked forward likelihood computation, and the action tensor $(P, T, A)$ is broadcast against the transition tensor $(A, T, T)$ to produce the action-conditioned transition probabilities at each timestep.
 
 The Gaussian-Wishart emission parameters are sampled using NumPyro's `dist.Wishart` and `dist.MultivariateNormal` distributions, with the `concentration` parameter specifying the degrees of freedom $\nu$. This follows NumPyro's API convention where `concentration` corresponds to the statistical degrees of freedom of the Wishart distribution.
 
-## 6.11 Summary
+## 6.12 Summary
 
 This chapter has extended the HDP-GMM with a Hidden Markov Model layer, enabling the modelling of temporal form dynamics. The HDP-HMM's transition matrices encode form persistence and transition asymmetries. The FFBS algorithm enables efficient posterior inference over state trajectories. Crucially, the posterior distributions define the Belief-State MDP necessary for the sequential decision-making agents. Mean-field coupling captures population-level form trends, and forward simulation enables multi-step-ahead prediction for proactive decision-making. The next chapter addresses the computational aspects of posterior inference — MCMC, Gibbs sampling, NUTS via NumPyro, JAX/XLA JIT acceleration, variational inference alternatives, and convergence diagnostics.

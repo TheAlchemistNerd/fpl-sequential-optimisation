@@ -118,7 +118,7 @@ def plot_ict_by_position(
 def plot_xg_vs_goals(
     df: pd.DataFrame,
     output_dir: Path = Path("reports/figures"),
-) -> Path:
+) -> Path | None:
     """
     Scatter: xG per 90 vs goals per 90.
     Players above diagonal: over-performing (clinical / lucky).
@@ -130,7 +130,7 @@ def plot_xg_vs_goals(
 
     if xg_col not in df.columns or goals_col not in df.columns:
         logger.warning("Cannot plot xG vs goals: missing columns.")
-        return Path("")
+        return None
 
     fig, ax = plt.subplots(figsize=(8, 6))
     mask = (df[xg_col] >= 0) & (df[goals_col] >= 0)
@@ -220,7 +220,7 @@ def plot_form_trajectory(
     player_id: int,
     form_col: str = "Form_5",
     output_dir: Path = Path("reports/figures"),
-) -> Path:
+) -> Path | None:
     """
     Rolling 5-game average points for a single player.
     Reveals hot streaks and slumps.
@@ -228,7 +228,7 @@ def plot_form_trajectory(
     player_df = df[df["player_id"] == player_id].sort_values("gameweek")
     if player_df.empty:
         logger.warning("No data for player %d", player_id)
-        return Path("")
+        return None
 
     fig, ax = plt.subplots(figsize=(10, 4))
     ax.plot(player_df["gameweek"], player_df[form_col], marker="o", markersize=4)
@@ -244,14 +244,14 @@ def plot_price_change_dynamics(
     df: pd.DataFrame,
     player_id: int,
     output_dir: Path = Path("reports/figures"),
-) -> Path:
+) -> Path | None:
     """
     Player price changes over time.
     Reveals the lag structure of the FPL pricing algorithm (2-4 GW lag).
     """
     player_df = df[df["player_id"] == player_id].sort_values("gameweek")
     if player_df.empty or "price_change" not in player_df.columns:
-        return Path("")
+        return None
 
     fig, ax = plt.subplots(figsize=(10, 4))
     ax.bar(player_df["gameweek"], player_df["price_change"], width=0.8, alpha=0.7)
@@ -277,6 +277,10 @@ def plot_position_violins(
     Violin plot of points by position.
     Shows: GK low variance, FWD high variance with occasional massive hauls.
     """
+    missing = {"position", value_col} - set(df.columns)
+    if missing:
+        raise KeyError(f"Missing required EDA columns: {', '.join(sorted(missing))}")
+
     fig, ax = plt.subplots(figsize=(8, 6))
     sns.violinplot(data=df, x="position", y=value_col, ax=ax, inner="quartile")
     ax.set_title("Points Distribution by Position")
@@ -294,39 +298,57 @@ def run_full_eda(
     df: pd.DataFrame,
     output_dir: Path = Path("reports/figures"),
     sample_players: list[int] | None = None,
-) -> dict[str, Path]:
+) -> dict[str, Path | int]:
     """
     Run the complete EDA suite and save all figures.
 
-    Returns a dict mapping figure names to saved file paths.
+    Returns figure paths and the count of highly correlated feature pairs.
     """
-    results: dict[str, Path] = {}
+    results: dict[str, Path | int] = {}
 
-    # Univariate
-    results["points_dist"] = plot_points_distribution(df, output_dir=output_dir)
-    results["price_dist"] = plot_price_distribution(df, output_dir=output_dir)
-    results["ict_by_position"] = plot_ict_by_position(df, output_dir=output_dir)
+    # Run only analyses supported by the supplied feature set.
+    if "total_points" in df.columns:
+        results["points_dist"] = plot_points_distribution(df, output_dir=output_dir)
+    if "now_cost" in df.columns:
+        results["price_dist"] = plot_price_distribution(df, output_dir=output_dir)
+    if "position" in df.columns and (
+        "ict_index" in df.columns or "influence" in df.columns
+    ):
+        results["ict_by_position"] = plot_ict_by_position(df, output_dir=output_dir)
 
     # Bivariate
-    results["xg_vs_goals"] = plot_xg_vs_goals(df, output_dir=output_dir)
+    xg_path = plot_xg_vs_goals(df, output_dir=output_dir)
+    if xg_path is not None:
+        results["xg_vs_goals"] = xg_path
     feature_cols = [c for c in df.columns if c.endswith("_per_90")]
-    results["correlation"] = plot_correlation_heatmap(df, feature_cols, output_dir=output_dir)
-    high_corr = find_highly_correlated_pairs(df, feature_cols)
-    results["high_corr_count"] = Path(f"{len(high_corr)} pairs > 0.9")
+    if feature_cols:
+        results["correlation"] = plot_correlation_heatmap(
+            df, feature_cols, output_dir=output_dir
+        )
+        high_corr = find_highly_correlated_pairs(df, feature_cols)
+        results["high_corr_count"] = len(high_corr)
 
     # Position-specific
-    results["position_violins"] = plot_position_violins(df, output_dir=output_dir)
+    if {"position", "total_points"}.issubset(df.columns):
+        results["position_violins"] = plot_position_violins(
+            df, output_dir=output_dir
+        )
 
     # Time series (sample players)
-    if sample_players is None:
+    if sample_players is None and "player_id" in df.columns:
         sample_players = df["player_id"].head(5).tolist()
+    if sample_players is None:
+        sample_players = []
+    has_player_history = {"player_id", "gameweek"}.issubset(df.columns)
     for pid in sample_players:
-        path = plot_form_trajectory(df, pid, output_dir=output_dir)
-        if path:
-            results[f"form_p{pid}"] = path
-        path = plot_price_change_dynamics(df, pid, output_dir=output_dir)
-        if path:
-            results[f"price_p{pid}"] = path
+        if has_player_history and "Form_5" in df.columns:
+            path = plot_form_trajectory(df, pid, output_dir=output_dir)
+            if path is not None:
+                results[f"form_p{pid}"] = path
+        if has_player_history and "price_change" in df.columns:
+            path = plot_price_change_dynamics(df, pid, output_dir=output_dir)
+            if path is not None:
+                results[f"price_p{pid}"] = path
 
     logger.info("Full EDA complete: %d figures saved", len(results))
     return results

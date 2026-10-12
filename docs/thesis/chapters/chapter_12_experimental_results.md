@@ -45,10 +45,11 @@
 
 <!-- TODO:
 - Trace plots for key parameters (γ, α, μ_k, Σ_k diagonal elements)
+- Figure 12.1: Trace plots for γ, α, and representative μ_k diagonal elements across the four chains
 - Gelman-Rubin r̂ values across 4 chains (target: < 1.01 for all parameters)
 - Effective Sample Size (ESS) per parameter (target: > 400)
 - Geweke diagnostic z-scores
-- Table: Parameter | r̂ | ESS | Geweke z
+- Table 12.1: Parameter | r̂ | ESS | Geweke z
 -->
 
 ## 12.4 Cluster Interpretability
@@ -124,13 +125,13 @@
 - Table: Method | Points | Optimality Gap (%) | Runtime (ms)
 -->
 
-### 12.5.8 Ablation 8: Principled Boltzmann (Max-Entropy RL) vs $\epsilon$-Greedy
+### 12.5.8 Ablation 8: TS Posterior Sampling vs Principled Boltzmann (Max-Entropy RL) vs $\epsilon$-Greedy
 
 <!-- TODO:
-- Evaluate the performance of the principled Boltzmann policy (derived from Maximum Entropy RL) against a standard $\epsilon$-greedy heuristic.
-- Metric: cumulative points, exploration diversity (unique players selected), and risk-adjusted returns.
+- Compare TS posterior sampling, the principled Boltzmann policy (derived from Maximum Entropy RL), and a standard $\epsilon$-greedy heuristic.
+- Metrics: cumulative points, exploration diversity (unique players selected), risk-adjusted returns, and rank.
 - Hypothesis: $\epsilon$-greedy is overly greedy and explores arbitrarily, leading to suboptimal transfers in FPL's stochastic environment. The principled Boltzmann policy optimally balances reward maximization with entropy (hedging), providing superior performance in navigating multi-modal posterior beliefs.
-- Table: Strategy | Total Points | Unique Players Selected | Rank
+- Table: Strategy | Total Points | Unique Players Selected | Risk-Adjusted Returns | Rank
 -->
 
 ### 12.5.9 Ablation 9: Position-Specific vs Unified HDP-HMM
@@ -200,6 +201,7 @@
   - Data ingestion: X seconds
   - HDP-HMM MCMC (4 chains, 500 warmup, 1000 samples): X minutes on GPU
   - Thompson Sampling (posterior sampling + MILP): X milliseconds
+  - TS+MCTS rollout (report search horizon and simulation budget): X seconds
   - DDQN forward pass: X milliseconds
   - Full weekly pipeline: X minutes total
 -->

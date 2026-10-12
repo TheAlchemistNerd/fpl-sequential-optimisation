@@ -46,12 +46,12 @@
 ## Appendix C: Full Algorithm Listings
 
 <!-- TODO: Include complete pseudocode for:
-1. Full HDP-GMM Gibbs Sampler (expanded from Ch4 §4.4.3)
-2. Full HDP-HMM Gibbs Sampler with FFBS (expanded from Ch5 §5.3.4)
-3. Complete DDQN Training Loop (expanded from Ch8 §8.5.3)
-4. Thompson Sampling Pipeline (expanded from Ch7 §7.4.2)
-5. MILP Solver Configuration (expanded from Ch9 §9.6.2)
-6. Data Ingestion Pipeline (expanded from Ch10 §10.3)
+1. Full HDP-GMM Gibbs Sampler (expanded from Chapter 5, §5.4.3)
+2. Full HDP-HMM Gibbs Sampler with FFBS (expanded from Chapter 6, §6.3.4)
+3. Complete DDQN Training Loop (expanded from Chapter 10, §10.6.3)
+4. Thompson Sampling Pipeline (expanded from Chapter 9, §9.4.2)
+5. MILP Solver Configuration (expanded from Chapter 8, §8.6.2)
+6. Data Ingestion Pipeline (expanded from Chapter 11, §11.3.1)
 -->
 
 ## Appendix D: Additional Convergence Diagnostics

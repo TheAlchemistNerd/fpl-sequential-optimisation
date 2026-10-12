@@ -1,4 +1,5 @@
-% Modern Preamble using System Fonts
+% Use installed Windows fonts by file path so XeLaTeX does not depend on the
+% host's fontconfig cache. On other systems, Pandoc's TeX defaults are used.
 \usepackage{fontspec}
 
 % Colors
@@ -6,10 +7,36 @@
 \definecolor{DeepBlue}{HTML}{2e4a62}
 \definecolor{LinkBlue}{HTML}{0078d4}
 
-% Typography - Using guaranteed Windows fonts
-\setmainfont{Georgia}         % Elegant Serif
-\setsansfont{Arial}           % Clean Sans-serif
-\setmonofont{Consolas}        % Professional Mono
+\IfFileExists{C:/Windows/Fonts/georgia.ttf}{
+  \setmainfont{Georgia}[
+    Path=C:/Windows/Fonts/,
+    Extension=.ttf,
+    UprightFont=georgia,
+    BoldFont=georgiab,
+    ItalicFont=georgiai,
+    BoldItalicFont=georgiaz
+  ]
+}{}
+\IfFileExists{C:/Windows/Fonts/arial.ttf}{
+  \setsansfont{Arial}[
+    Path=C:/Windows/Fonts/,
+    Extension=.ttf,
+    UprightFont=arial,
+    BoldFont=arialbd,
+    ItalicFont=ariali,
+    BoldItalicFont=arialbi
+  ]
+}{}
+\IfFileExists{C:/Windows/Fonts/consola.ttf}{
+  \setmonofont{Consolas}[
+    Path=C:/Windows/Fonts/,
+    Extension=.ttf,
+    UprightFont=consola,
+    BoldFont=consolab,
+    ItalicFont=consolai,
+    BoldItalicFont=consolaz
+  ]
+}{}
 
 % Section Header Styling
 \usepackage{titlesec}

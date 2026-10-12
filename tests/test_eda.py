@@ -12,7 +12,6 @@ Tests cover:
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import matplotlib
 matplotlib.use("Agg")
@@ -72,8 +71,7 @@ def sample_player_history():
 class TestHelperFunctions:
     """Validate EDA helper functions."""
 
-    @patch("src.data.eda._save")
-    def test_save_creates_directory(self, mock_save):
+    def test_save_creates_directory(self):
         from src.data.eda import _save
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -183,8 +181,7 @@ class TestBivariateAnalysis:
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
             result = plot_xg_vs_goals(df, output_dir=Path(tmpdir))
-            # Should return empty path
-            assert str(result) == "" or not result.exists()
+            assert result is None
 
     def test_plot_correlation_heatmap(self, sample_eda_data):
         from src.data.eda import plot_correlation_heatmap
@@ -256,8 +253,7 @@ class TestTimeSeriesAnalysis:
                 player_id=999,
                 output_dir=Path(tmpdir),
             )
-            # Should return empty path
-            assert str(result) == "" or not result.exists()
+            assert result is None
 
     def test_plot_form_trajectory_custom_form_col(self, sample_player_history):
         from src.data.eda import plot_form_trajectory
@@ -289,8 +285,7 @@ class TestTimeSeriesAnalysis:
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
             result = plot_price_change_dynamics(df, player_id=1, output_dir=Path(tmpdir))
-            # Should return empty path
-            assert str(result) == "" or not result.exists()
+            assert result is None
 
 
 # ===========================================================================
@@ -327,7 +322,7 @@ class TestPositionSpecificPatterns:
         })
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(KeyError):
+            with pytest.raises(KeyError, match="position"):
                 plot_position_violins(df, output_dir=Path(tmpdir))
 
 
@@ -345,6 +340,7 @@ class TestFullEDAReport:
         with tempfile.TemporaryDirectory() as tmpdir:
             result = run_full_eda(sample_eda_data, output_dir=Path(tmpdir))
             assert isinstance(result, dict)
+            assert isinstance(result["high_corr_count"], int)
             # Should have saved multiple figures
             assert len(result) > 5
 
@@ -391,8 +387,8 @@ class TestEdgeCases:
         df = pd.DataFrame(columns=["total_points"])
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(Exception):
-                plot_points_distribution(df, output_dir=Path(tmpdir))
+            result = plot_points_distribution(df, output_dir=Path(tmpdir))
+            assert result.exists()
 
     def test_plot_correlation_heatmap_single_column(self):
         from src.data.eda import plot_correlation_heatmap

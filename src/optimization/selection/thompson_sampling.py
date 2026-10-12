@@ -11,7 +11,7 @@ Two tiers of knapsack solving:
 
 Usage
 -----
->>> from src.optimization.thompson_sampling import thompson_sampling_select, thompson_sampling_milp
+>>> from src.optimization.selection.thompson_sampling import thompson_sampling_select, thompson_sampling_milp
 >>> squad = thompson_sampling_select(belief_states, points_map, ...)         # greedy
 >>> result = thompson_sampling_milp(player_pool, points_map, budget=100.0)  # exact
 """
@@ -303,7 +303,7 @@ def thompson_sampling_milp(
         sampled_points[pid] = float(nb.sample(rng))
 
     # Solve with MILP
-    from src.optimization.milp_solver import (
+    from src.optimization.selection.milp_solver import (
         solve_squad_optimisation,
         solve_with_transfers,
     )

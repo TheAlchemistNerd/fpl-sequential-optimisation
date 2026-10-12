@@ -1,10 +1,8 @@
-"""FastAPI inference service for FPL decision recommendations.
+"""FastAPI endpoints for FPL health, stored beliefs, and recommendations.
 
-Production-grade endpoints:
-    GET  /health          — liveness check
-    GET  /beliefs         — current HDP belief state for all players
-    POST /recommendations — optimal transfers, lineup, and captain
-    POST /retrain         — trigger a model retrain (admin only)
+Recommendations currently use FPL points-per-game values as Thompson-sampling
+score inputs, followed by MILP squad selection and a separate chip heuristic.
+The retraining endpoint reports that no retraining job is configured.
 """
 
 from __future__ import annotations
@@ -58,7 +56,7 @@ class RecommendationResponse(BaseModel):
     chip_recommended: Optional[str] = None
 
 
-class RetriggerResponse(BaseModel):
+class RetrainResponse(BaseModel):
     status: str
     message: str
 
@@ -72,7 +70,7 @@ class RetriggerResponse(BaseModel):
 async def lifespan(app: FastAPI):
     """Initialise services on startup, clean up on shutdown."""
     log.info("FPL Prediction API starting…")
-    # Load latest models from MLflow registry
+    # Report the configured tracker; loading a model is not wired here.
     tracker = get_tracker()
     log.info("MLflow tracking URI: %s", tracker.tracking_uri)
     yield
@@ -81,7 +79,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="FPL Prediction API",
-    description="Bayesian HDP + optimisation service for FPL decisions.",
+    description="FPL health, stored belief-state, and selection recommendation API.",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -108,7 +106,7 @@ def get_beliefs(
     gameweek: Optional[int] = None,
     model: str = "hdp_gmm",
 ) -> list[BeliefResponse] | dict[str, Any]:
-    """Return the current belief state from the HDP model.
+    """Return persisted belief rows from the on-disk CSV for the requested GW.
 
     Parameters
     ----------
@@ -117,13 +115,9 @@ def get_beliefs(
     gameweek : int, optional
         Gameweek number. Defaults to latest available.
     model : str
-        Which HDP variant to query (``hdp_gmm``, ``hdp_poisson_gamma``,
-        ``hdp_negbin``).
+        Retained for query compatibility; it does not select a model currently.
     """
-    # Load belief states from disk cache or MLflow
-    from src.mlops.drift_detector import compute_population_drift
-    from src.models.belief_state import BeliefState
-
+    # Belief snapshots are currently read from CSV files on disk.
     belief_store = settings.DATA_DIR / "belief_states"
     if not belief_store.exists():
         raise HTTPException(
@@ -168,17 +162,15 @@ def get_beliefs(
 
 @app.post("/recommendations", response_model=RecommendationResponse)
 def get_recommendations(req: RecommendationRequest) -> RecommendationResponse:
-    """Return optimal transfers, lineup, and captain for *gameweek*.
+    """Recommend a squad, lineup, and captain for *gameweek*.
 
-    The service:
-    1. Loads latest HDP posteriors.
-    2. Runs Thompson Sampling (sample from posteriors).
-    3. Solves the MILP optimisation for the sampled scores.
+    The current implementation supplies each player's ``points_per_game`` as
+    the expected-points input to the Thompson-sampling MILP selector. It does
+    not load HDP posteriors. Chip advice comes from a separate heuristic.
     """
-    from src.optimization.milp_solver import solve_squad_optimisation, solve_with_transfers
-    from src.optimization.thompson_sampling import thompson_sampling_milp
+    from src.optimization.selection.thompson_sampling import thompson_sampling_milp
 
-    # Load player pool and belief states
+    # Load the player pool; this route does not read persisted belief states.
     player_pool = _load_player_pool()
     if player_pool is None:
         raise HTTPException(
@@ -186,7 +178,7 @@ def get_recommendations(req: RecommendationRequest) -> RecommendationResponse:
             "No player data available. Run the data pipeline first.",
         )
 
-    # Run Thompson Sampling with MILP
+    # Use points_per_game as the Thompson-sampling expected-points input.
     current_squad = req.current_squad or []
     result = thompson_sampling_milp(
         player_pool=player_pool,
@@ -222,24 +214,14 @@ def get_recommendations(req: RecommendationRequest) -> RecommendationResponse:
 # ---------------------------------------------------------------------------
 
 
-@app.post("/retrain", response_model=RetriggerResponse)
-def trigger_retrain() -> RetriggerResponse:
-    """Trigger a full model retrain pipeline.
-
-    In production this would enqueue a Prefect/Airflow flow run.
-    """
-    log.info("Retrain requested — triggering data pipeline.")
-    try:
-        from src.pipeline.data_pipeline import run_pipeline
-        # In production, this would be async via Celery/Prefect
-        # run_pipeline(latest_gameweek=_get_latest_gameweek())
-        return RetriggerResponse(
-            status="queued",
-            message="Retrain pipeline enqueued.",
-        )
-    except Exception as e:
-        log.error("Failed to enqueue retrain: %s", e)
-        raise HTTPException(500, f"Retrain failed: {e}")
+@app.post("/retrain", response_model=RetrainResponse)
+def trigger_retrain() -> RetrainResponse:
+    """Report that no retraining job is configured for this endpoint."""
+    log.info("Retrain requested, but no retraining job is configured.")
+    return RetrainResponse(
+        status="not_configured",
+        message="No retraining job is configured for this endpoint.",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -256,11 +238,30 @@ def _load_player_pool() -> dict[str, Any] | None:
         return None
 
     players_df = pd.read_csv(players_file)
+    position_map = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
+    if "position" in players_df.columns:
+        positions = players_df["position"].fillna("MID")
+    elif "element_type" in players_df.columns:
+        positions = players_df["element_type"].map(position_map).fillna("MID")
+    else:
+        positions = pd.Series("MID", index=players_df.index)
+
+    if "now_cost" in players_df.columns:
+        prices = pd.to_numeric(players_df["now_cost"], errors="coerce").div(10).fillna(5.0)
+    else:
+        prices = pd.Series(5.0, index=players_df.index)
+
+    clubs = (
+        players_df["team"].fillna(0)
+        if "team" in players_df.columns
+        else pd.Series(0, index=players_df.index)
+    )
+
     return {
         "ids": players_df["id"].tolist(),
-        "positions": players_df.get("position", ["MID"] * len(players_df)).tolist(),
-        "prices": players_df.get("now_cost", [50] * len(players_df)).tolist(),
-        "clubs": players_df.get("team", [0] * len(players_df)).tolist(),
+        "positions": positions.astype(str).tolist(),
+        "prices": prices.astype(float).tolist(),
+        "clubs": clubs.tolist(),
         "points": {
             int(row["id"]): float(row.get("points_per_game", 5.0))
             for _, row in players_df.iterrows()
@@ -273,13 +274,18 @@ def _get_latest_gameweek(belief_store: Path) -> int:
     files = list(belief_store.glob("belief_states_gw*.csv"))
     if not files:
         return 1
-    gw_numbers = [int(f.stem.split("_")[-1]) for f in files]
-    return max(gw_numbers)
+    prefix = "belief_states_gw"
+    gw_numbers = [
+        int(suffix)
+        for f in files
+        if (suffix := f.stem.removeprefix(prefix)).isdigit()
+    ]
+    return max(gw_numbers, default=1)
 
 
 def _recommend_chip(gameweek: int, player_pool: dict[str, Any]) -> str | None:
     """Simple heuristic for chip recommendation."""
-    from src.optimization.chip_optimizer import ChipDeploymentOptimiser
+    from src.optimization.selection.chip_optimizer import ChipDeploymentOptimiser
 
     optimiser = ChipDeploymentOptimiser()
     rng = np.random.default_rng(gameweek)

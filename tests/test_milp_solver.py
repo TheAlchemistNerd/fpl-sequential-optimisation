@@ -1,5 +1,5 @@
 """
-Tests for src/optimization/milp_solver.py — MILP Constrained Optimiser.
+Tests for src/optimization/selection/milp_solver.py — MILP Constrained Optimiser.
 
 Tests cover (Ch. 10 §10.6, §10.9):
     - Squad size constraint (15 players)
@@ -77,7 +77,7 @@ class TestSquadConstraints:
 
     def test_squad_size_is_15(self, sample_player_pool):
         """Optimal squad must have exactly 15 players."""
-        from src.optimization.milp_solver import solve_squad_optimisation
+        from src.optimization.selection.milp_solver import solve_squad_optimisation
         result = solve_squad_optimisation(
             player_ids=sample_player_pool["ids"],
             positions=sample_player_pool["positions"],
@@ -90,7 +90,7 @@ class TestSquadConstraints:
 
     def test_formation_2_5_5_3(self, sample_player_pool):
         """Squad must have exactly 2 GK, 5 DEF, 5 MID, 3 FWD."""
-        from src.optimization.milp_solver import solve_squad_optimisation
+        from src.optimization.selection.milp_solver import solve_squad_optimisation
         result = solve_squad_optimisation(
             player_ids=sample_player_pool["ids"],
             positions=sample_player_pool["positions"],
@@ -110,7 +110,7 @@ class TestSquadConstraints:
 
     def test_budget_not_exceeded(self, sample_player_pool):
         """Total squad price must not exceed budget."""
-        from src.optimization.milp_solver import solve_squad_optimisation
+        from src.optimization.selection.milp_solver import solve_squad_optimisation
         # Generous budget to ensure feasibility with random prices
         budget = 200.0
         result = solve_squad_optimisation(
@@ -129,7 +129,7 @@ class TestSquadConstraints:
 
     def test_per_team_limit_3(self, sample_player_pool):
         """No more than 3 players from any single club."""
-        from src.optimization.milp_solver import solve_squad_optimisation
+        from src.optimization.selection.milp_solver import solve_squad_optimisation
         result = solve_squad_optimisation(
             player_ids=sample_player_pool["ids"],
             positions=sample_player_pool["positions"],
@@ -157,7 +157,7 @@ class TestStartingXIAndCaptaincy:
 
     def test_starting_xi_size_11(self, sample_player_pool):
         """Starting XI must have exactly 11 players."""
-        from src.optimization.milp_solver import solve_squad_optimisation
+        from src.optimization.selection.milp_solver import solve_squad_optimisation
         result = solve_squad_optimisation(
             player_ids=sample_player_pool["ids"],
             positions=sample_player_pool["positions"],
@@ -170,7 +170,7 @@ class TestStartingXIAndCaptaincy:
 
     def test_starters_from_squad(self, sample_player_pool):
         """All starters must be members of the squad."""
-        from src.optimization.milp_solver import solve_squad_optimisation
+        from src.optimization.selection.milp_solver import solve_squad_optimisation
         result = solve_squad_optimisation(
             player_ids=sample_player_pool["ids"],
             positions=sample_player_pool["positions"],
@@ -183,7 +183,7 @@ class TestStartingXIAndCaptaincy:
 
     def test_valid_formation(self, sample_player_pool):
         """Starting XI must have ≥1 GK, ≥3 DEF, ≥1 FWD."""
-        from src.optimization.milp_solver import solve_squad_optimisation
+        from src.optimization.selection.milp_solver import solve_squad_optimisation
         result = solve_squad_optimisation(
             player_ids=sample_player_pool["ids"],
             positions=sample_player_pool["positions"],
@@ -202,7 +202,7 @@ class TestStartingXIAndCaptaincy:
 
     def test_exactly_one_captain(self, sample_player_pool):
         """Exactly one captain, and captain must be a starter."""
-        from src.optimization.milp_solver import solve_squad_optimisation
+        from src.optimization.selection.milp_solver import solve_squad_optimisation
         result = solve_squad_optimisation(
             player_ids=sample_player_pool["ids"],
             positions=sample_player_pool["positions"],
@@ -217,7 +217,7 @@ class TestStartingXIAndCaptaincy:
 
     def test_vice_captain_is_starter(self, sample_player_pool):
         """Vice-captain must be a starter and different from captain."""
-        from src.optimization.milp_solver import solve_squad_optimisation
+        from src.optimization.selection.milp_solver import solve_squad_optimisation
         result = solve_squad_optimisation(
             player_ids=sample_player_pool["ids"],
             positions=sample_player_pool["positions"],
@@ -240,9 +240,40 @@ class TestStartingXIAndCaptaincy:
 class TestTransferCosts:
     """Validate piecewise linear transfer cost encoding."""
 
+    def test_transfer_optimisation_keeps_standard_squad_constraints(
+        self, sample_player_pool
+    ):
+        from src.optimization.selection.milp_solver import solve_with_transfers
+
+        result = solve_with_transfers(
+            player_ids=sample_player_pool["ids"],
+            positions=sample_player_pool["positions"],
+            prices=sample_player_pool["prices"],
+            predicted_points=sample_player_pool["predicted_points"],
+            clubs=sample_player_pool["clubs"],
+            budget=100.0,
+            current_squad=sample_player_pool["ids"][:15],
+            free_transfers=2,
+        )
+
+        assert len(result["squad"]) == 15
+        assert result["total_cost"] <= 100.0
+        squad_positions = [
+            sample_player_pool["positions"][sample_player_pool["ids"].index(pid)]
+            for pid in result["squad"]
+        ]
+        for position, required in {"GK": 2, "DEF": 5, "MID": 5, "FWD": 3}.items():
+            assert squad_positions.count(position) == required
+
+        assert len(result["starting_xi"]) == 11
+        assert set(result["starting_xi"]).issubset(result["squad"])
+        assert result["captain"] in result["starting_xi"]
+        assert result["vice_captain"] in result["starting_xi"]
+        assert result["captain"] != result["vice_captain"]
+
     def test_no_transfer_cost_within_free_limit(self, sample_player_pool):
         """Transfers within free allowance should cost 0 points."""
-        from src.optimization.milp_solver import solve_with_transfers
+        from src.optimization.selection.milp_solver import solve_with_transfers
         # Current squad (all player IDs 1-15)
         current_squad = sample_player_pool["ids"][:15]
         result = solve_with_transfers(
@@ -260,7 +291,7 @@ class TestTransferCosts:
 
     def test_transfer_cost_4_per_extra(self, sample_player_pool):
         """Each transfer beyond free allowance costs 4 points."""
-        from src.optimization.milp_solver import solve_with_transfers
+        from src.optimization.selection.milp_solver import solve_with_transfers
         # Completely different squad → many transfers
         current_squad = sample_player_pool["ids"][:15]
         result = solve_with_transfers(
@@ -280,7 +311,7 @@ class TestTransferCosts:
 
     def test_optimises_net_gain_not_gross_points(self, sample_player_pool):
         """Solver should maximise (new_points - old_points - transfer_cost)."""
-        from src.optimization.milp_solver import solve_with_transfers
+        from src.optimization.selection.milp_solver import solve_with_transfers
         # Squad with very high predicted points
         current_squad = sample_player_pool["ids"][:15]
         # Give current squad very high points so transfers aren't worth it
@@ -310,7 +341,7 @@ class TestEdgeCases:
 
     def test_tight_budget_feasible(self):
         """With minimum budget, should still find a feasible squad."""
-        from src.optimization.milp_solver import solve_squad_optimisation
+        from src.optimization.selection.milp_solver import solve_squad_optimisation
         # 30 players: 4 GK@4.5, 8 DEF@5.0, 10 MID@6.0, 8 FWD@7.0
         # Minimum valid squad: 2*4.5 + 5*5.0 + 5*6.0 + 3*7.0 = 85.0
         ids = list(range(1, 31))
@@ -331,7 +362,7 @@ class TestEdgeCases:
 
     def test_infeasible_budget_raises(self):
         """Budget below minimum should raise an error or return infeasible."""
-        from src.optimization.milp_solver import solve_squad_optimisation
+        from src.optimization.selection.milp_solver import solve_squad_optimisation
         ids = list(range(1, 31))
         positions = ["GK"]*4 + ["DEF"]*8 + ["MID"]*10 + ["FWD"]*8
         prices = [10.0]*30  # All expensive
@@ -350,7 +381,7 @@ class TestEdgeCases:
 
     def test_empty_player_pool_raises(self):
         """Empty pool should raise an error."""
-        from src.optimization.milp_solver import solve_squad_optimisation
+        from src.optimization.selection.milp_solver import solve_squad_optimisation
         with pytest.raises(ValueError):
             solve_squad_optimisation(
                 player_ids=[],

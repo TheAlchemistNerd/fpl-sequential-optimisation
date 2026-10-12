@@ -44,6 +44,64 @@ def _check_pulp() -> None:
         )
 
 
+def _add_squad_constraints(
+    prob: Any,
+    x: dict[int, Any],
+    s: dict[int, Any],
+    c: dict[int, Any],
+    vc: dict[int, Any],
+    player_count: int,
+    positions: list[str],
+    prices: list[float],
+    clubs: list[str],
+    unique_clubs: list[str],
+    budget: float,
+) -> None:
+    """Add the squad, XI, formation, budget, and captaincy constraints."""
+    prob += pulp.lpSum(x[i] for i in range(player_count)) == SQUAD_SIZE, "Squad_Size"
+
+    for pos, required in POSITION_REQUIREMENTS.items():
+        pos_indices = [i for i in range(player_count) if positions[i] == pos]
+        prob += (
+            pulp.lpSum(x[i] for i in pos_indices) == required,
+            f"Formation_{pos}",
+        )
+
+    prob += (
+        pulp.lpSum(prices[i] * x[i] for i in range(player_count)) <= budget,
+        "Budget",
+    )
+
+    for club in unique_clubs:
+        club_indices = [i for i in range(player_count) if clubs[i] == club]
+        if club_indices:
+            prob += (
+                pulp.lpSum(x[i] for i in club_indices) <= MAX_PER_CLUB,
+                f"PerTeam_{club}",
+            )
+
+    prob += (
+        pulp.lpSum(s[i] for i in range(player_count)) == STARTING_XI_SIZE,
+        "XI_Size",
+    )
+    for i in range(player_count):
+        prob += s[i] <= x[i], f"Starter_From_Squad_{i}"
+
+    gk_indices = [i for i in range(player_count) if positions[i] == "GK"]
+    def_indices = [i for i in range(player_count) if positions[i] == "DEF"]
+    fwd_indices = [i for i in range(player_count) if positions[i] == "FWD"]
+    prob += pulp.lpSum(s[i] for i in gk_indices) >= 1, "XI_Min_GK"
+    prob += pulp.lpSum(s[i] for i in def_indices) >= 3, "XI_Min_DEF"
+    prob += pulp.lpSum(s[i] for i in fwd_indices) >= 1, "XI_Min_FWD"
+
+    prob += pulp.lpSum(c[i] for i in range(player_count)) == 1, "One_Captain"
+    prob += pulp.lpSum(vc[i] for i in range(player_count)) == 1, "One_Vice_Captain"
+    for i in range(player_count):
+        prob += c[i] <= s[i], f"Captain_Is_Starter_{i}"
+        prob += vc[i] <= s[i], f"Vice_Captain_Is_Starter_{i}"
+        prob += c[i] + vc[i] <= 1, f"Captain_Ne_Vice_{i}"
+
+
 # ---------------------------------------------------------------------------
 # Core Squad Optimisation (Ch. 10 §10.6)
 # ---------------------------------------------------------------------------
@@ -110,58 +168,9 @@ def solve_squad_optimisation(
         "Total_Points",
     )
 
-    # -- Constraint 1: Squad size = 15 -------------------------------------
-    prob += pulp.lpSum(x[i] for i in range(N)) == SQUAD_SIZE, "Squad_Size"
-
-    # -- Constraint 2: Formation (2-5-5-3) ---------------------------------
-    for pos, required in POSITION_REQUIREMENTS.items():
-        pos_indices = [i for i in range(N) if positions[i] == pos]
-        prob += (
-            pulp.lpSum(x[i] for i in pos_indices) == required,
-            f"Formation_{pos}",
-        )
-
-    # -- Constraint 3: Budget ----------------------------------------------
-    prob += (
-        pulp.lpSum(prices[i] * x[i] for i in range(N)) <= budget,
-        "Budget",
+    _add_squad_constraints(
+        prob, x, s, c, vc, N, positions, prices, clubs, unique_clubs, budget
     )
-
-    # -- Constraint 4: Per-team limit (≤3 per club) ------------------------
-    for club in unique_clubs:
-        club_indices = [i for i in range(N) if clubs[i] == club]
-        if club_indices:
-            prob += (
-                pulp.lpSum(x[i] for i in club_indices) <= MAX_PER_CLUB,
-                f"PerTeam_{club}",
-            )
-
-    # -- Constraint 5: Starting XI size = 11 --------------------------------
-    prob += pulp.lpSum(s[i] for i in range(N)) == STARTING_XI_SIZE, "XI_Size"
-
-    # -- Constraint 6: Starters must be from squad --------------------------
-    for i in range(N):
-        prob += s[i] <= x[i], f"Starter_From_Squad_{i}"
-
-    # -- Constraint 7: Formation validity -----------------------------------
-    gk_indices = [i for i in range(N) if positions[i] == "GK"]
-    def_indices = [i for i in range(N) if positions[i] == "DEF"]
-    fwd_indices = [i for i in range(N) if positions[i] == "FWD"]
-
-    prob += pulp.lpSum(s[i] for i in gk_indices) >= 1, "XI_Min_GK"
-    prob += pulp.lpSum(s[i] for i in def_indices) >= 3, "XI_Min_DEF"
-    prob += pulp.lpSum(s[i] for i in fwd_indices) >= 1, "XI_Min_FWD"
-
-    # -- Constraint 8: Exactly one captain (must be starter) ----------------
-    prob += pulp.lpSum(c[i] for i in range(N)) == 1, "One_Captain"
-    for i in range(N):
-        prob += c[i] <= s[i], f"Captain_Is_Starter_{i}"
-
-    # -- Constraint 9: Exactly one vice-captain (must be starter, ≠captain) -
-    prob += pulp.lpSum(vc[i] for i in range(N)) == 1, "One_Vice_Captain"
-    for i in range(N):
-        prob += vc[i] <= s[i], f"Vice_Captain_Is_Starter_{i}"
-        prob += c[i] + vc[i] <= 1, f"Captain_Ne_Vice_{i}"
 
     # -- Solve -------------------------------------------------------------
     solver = pulp.PULP_CBC_CMD(msg=0, timeLimit=30)
@@ -278,37 +287,10 @@ def solve_with_transfers(
         "Net_Gain",
     )
 
-    # -- All standard constraints (same as solve_squad_optimisation) ---------
-    prob += pulp.lpSum(x[i] for i in range(N)) == SQUAD_SIZE, "Squad_Size"
-
-    for pos, required in POSITION_REQUIREMENTS.items():
-        pos_indices = [i for i in range(N) if positions[i] == pos]
-        prob += pulp.lpSum(x[i] for i in pos_indices) == required, f"Formation_{pos}"
-
-    prob += pulp.lpSum(prices[i] * x[i] for i in range(N)) <= budget, "Budget"
-
-    for club in unique_clubs:
-        club_indices = [i for i in range(N) if clubs[i] == club]
-        if club_indices:
-            prob += pulp.lpSum(x[i] for i in club_indices) <= MAX_PER_CLUB, f"PerTeam_{club}"
-
-    prob += pulp.lpSum(s[i] for i in range(N)) == STARTING_XI_SIZE, "XI_Size"
-    for i in range(N):
-        prob += s[i] <= x[i], f"Starter_From_Squad_{i}"
-
-    gk_indices = [i for i in range(N) if positions[i] == "GK"]
-    def_indices = [i for i in range(N) if positions[i] == "DEF"]
-    fwd_indices = [i for i in range(N) if positions[i] == "FWD"]
-    prob += pulp.lpSum(s[i] for i in gk_indices) >= 1, "XI_Min_GK"
-    prob += pulp.lpSum(s[i] for i in def_indices) >= 3, "XI_Min_DEF"
-    prob += pulp.lpSum(s[i] for i in fwd_indices) >= 1, "XI_Min_FWD"
-
-    prob += pulp.lpSum(c[i] for i in range(N)) == 1, "One_Captain"
-    prob += pulp.lpSum(vc[i] for i in range(N)) == 1, "One_Vice_Captain"
-    for i in range(N):
-        prob += c[i] <= s[i], f"Captain_Is_Starter_{i}"
-        prob += vc[i] <= s[i], f"Vice_Captain_Is_Starter_{i}"
-        prob += c[i] + vc[i] <= 1, f"Captain_Ne_Vice_{i}"
+    # Shared squad/lineup constraints are identical to the non-transfer model.
+    _add_squad_constraints(
+        prob, x, s, c, vc, N, positions, prices, clubs, unique_clubs, budget
+    )
 
     # -- Solve -------------------------------------------------------------
     solver = pulp.PULP_CBC_CMD(msg=0, timeLimit=30)

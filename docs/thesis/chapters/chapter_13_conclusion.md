@@ -6,9 +6,9 @@
 
 1. **HDP-HMM for latent player form modelling** (Chapters 4-6): First application of Bayesian nonparametric methods to fantasy sports. The HDP-HMM with Gaussian-Wishart base measure discovers [X] interpretable form profiles per position and captures form persistence with diagonal-dominant transition matrices (avg π_{k,k} ≈ [X]).
 
-2. **Mean-Field Game analysis of classical FPL leagues** (Chapter 9, §9.9): Derived the coupled HJB-FP system characterising Nash equilibrium behaviour. The MFG framework reveals [strategic insight from experiments].
+2. **Mean-Field Game analysis of classical FPL leagues** (Chapter 10, §10.10): Derived the coupled HJB-FP system characterising Nash equilibrium behaviour. The MFG framework reveals [strategic insight from experiments].
 
-3. **Mean-Field Control for draft and H2H leagues** (Chapter 9, §9.10): Formulated optimal policies accounting for resource scarcity and opponent strength distributions.
+3. **Mean-Field Control for draft and H2H leagues** (Chapter 10, §10.11): Formulated optimal policies accounting for resource scarcity and opponent strength distributions.
 
 4. **Unified decision framework** (Chapters 8-10): Integrated Thompson Sampling (myopic, interpretable) with DDQN (long-horizon, strategic) and exact MILP constraint satisfaction. Ablations in Chapter 12 show [key finding].
 
@@ -63,6 +63,8 @@
 7. **Attention-based temporal models**: Replace the HDP-HMM with a transformer-based temporal model that can capture long-range dependencies in form trajectories.
 
 8. **Causal inference for transfers**: Use causal inference methods to distinguish between genuine form transitions and confounded effects (e.g., fixture difficulty masking true form).
+
+9. An untested extension is to estimate weekly price changes from aggregate transfer intensity, then evaluate whether this population-level signal changes the value or timing of early transfers. This is a proposed coupling between mean-field dynamics and price forecasting; it is not implemented or validated in the current system.
 -->
 
 ## 13.5 Closing Remarks

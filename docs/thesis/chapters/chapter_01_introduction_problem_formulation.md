@@ -73,7 +73,7 @@ Each chip can be used at most once (some twice):
 $$\sum_{t=1}^{38} \mathbb{I}(\chi_t = \text{Wildcard}) \leq 1, \quad \sum_{t=1}^{38} \mathbb{I}(\chi_t = \text{Free Hit}) \leq 1,$$
 $$\sum_{t=1}^{38} \mathbb{I}(\chi_t = \text{Bench Boost}) \leq 1, \quad \sum_{t=1}^{38} \mathbb{I}(\chi_t = \text{Triple Captain}) \leq 1.$$
 
-These constraints collectively define a constrained combinatorial optimisation problem that must be solved at every gameweek. The full mathematical treatment of these constraints within the Mixed-Integer Linear Programming (MILP) framework is given in Chapter 9.
+These constraints collectively define a constrained combinatorial optimisation problem that must be solved at every gameweek. The full mathematical treatment of these constraints within the Mixed-Integer Linear Programming (MILP) framework is given in Chapter 8.
 
 ## 1.3 FPL Competition Formats
 
@@ -81,11 +81,11 @@ The nature of the optimisation problem depends on the competition format. Four d
 
 ### 1.3.1 Classical Leagues
 
-Managers are ranked by their cumulative point total over the 38 gameweeks. The global classical leaderboard encompasses all ~10 million participants. This is a **zero-sum ranking game**: a manager's utility depends not only on their absolute point total but on their rank relative to the population. The presence of price dynamics — driven by aggregate transfer activity — introduces a mean-field interaction: individual decisions influence, and are influenced by, collective behaviour. The full Mean-Field Game (MFG) formulation is developed in Chapter 8, Section 8.9.
+Managers are ranked by their cumulative point total over the 38 gameweeks. The global classical leaderboard encompasses all ~10 million participants. This is a **zero-sum ranking game**: a manager's utility depends not only on their absolute point total but on their rank relative to the population. The presence of price dynamics — driven by aggregate transfer activity — introduces a mean-field interaction: individual decisions influence, and are influenced by, collective behaviour. The full Mean-Field Game (MFG) formulation is developed in Chapter 10, Section 10.10.
 
 ### 1.3.2 Head-to-Head (H2H) Leagues
 
-Managers are paired against a single opponent each gameweek. The objective is **gameweek-level victory** rather than cumulative point maximisation. This induces a different risk profile: beating an opponent by 1 point is equivalent to beating them by 50 points. The Mean-Field Control (MFC) formulation for H2H leagues is given in Chapter 8, Section 8.10.
+Managers are paired against a single opponent each gameweek. The objective is **gameweek-level victory** rather than cumulative point maximisation. This induces a different risk profile: beating an opponent by 1 point is equivalent to beating them by 50 points. The Mean-Field Control (MFC) formulation for H2H leagues is given in Chapter 10, Section 10.11.
 
 ### 1.3.3 Draft Leagues
 
@@ -143,12 +143,12 @@ graph TD
 
 **Layer 3: Decision Engine.** Four decision engines operate in parallel, each suited to different aspects of the problem:
 
-- **Thompson Sampling** (Chapter 8): A Bayesian approach that maintains a posterior distribution over each player's expected points, samples one "simulated world" per gameweek, and solves the resulting deterministic optimisation problem.
-- **DDQN with Boltzmann Policy** (Chapter 9): A deep reinforcement learning approach that learns long-term Q-values for transfer strategies, with smooth exploration controlled by a temperature parameter.
-- **MFG Solver** (Chapter 9, Section 9.9): Computes the mean-field equilibrium for classical leagues, capturing the strategic interdependence of population-level transfer behaviour.
-- **MFC Solver** (Chapter 9, Section 9.10): Optimises individual decisions in draft and H2H settings under population-level resource constraints.
+- **Thompson Sampling** (Chapter 9): A Bayesian approach that maintains a posterior distribution over each player's expected points, samples one "simulated world" per gameweek, and solves the resulting deterministic optimisation problem.
+- **DDQN with Boltzmann Policy** (Chapter 10): A deep reinforcement learning approach that learns long-term Q-values for transfer strategies, with smooth exploration controlled by a temperature parameter.
+- **MFG Solver** (Chapter 10, Section 10.10): Computes the mean-field equilibrium for classical leagues, capturing the strategic interdependence of population-level transfer behaviour.
+- **MFC Solver** (Chapter 10, Section 10.11): Optimises individual decisions in draft and H2H settings under population-level resource constraints.
 
-**Layer 4: Constrained Optimisation (MILP).** The outputs of the decision engine are fed into a Mixed-Integer Linear Program that enforces the FPL constraints (budget, formation, per-team limits, chip availability) and produces the optimal squad, lineup, captaincy, and chip decisions. The full MILP formulation is given in Chapter 10.
+**Layer 4: Constrained Optimisation (MILP).** The outputs of the decision engine are fed into a Mixed-Integer Linear Program that enforces the FPL constraints (budget, formation, per-team limits, chip availability) and produces the optimal squad, lineup, captaincy, and chip decisions. The full MILP formulation is given in Chapter 8.
 
 ## 1.6 Scope and Contributions of This Dissertation
 
@@ -164,4 +164,4 @@ This dissertation makes the following contributions to the theory and practice o
 
 5. **An end-to-end MLOps pipeline**: A production-grade pipeline for automated data ingestion, model updating, inference, and monitoring is designed and implemented, enabling real-time deployment.
 
-The remainder of this dissertation is organised as follows. Chapter 2 provides a literature review positioning this work within the current landscape of sports analytics and machine learning. Chapter 3 details the data acquisition, feature engineering, and exploratory data analysis pipeline. Chapter 4 develops the theoretical foundations of Bayesian nonparametrics, including the CRP, DP, and HDP. Chapter 5 presents the HDP-GMM with Gaussian-Wishart base measure. Chapter 6 extends this to the HDP-HMM with temporal dynamics. Chapter 7 addresses posterior inference via MCMC and NUTS. Chapter 8 develops Thompson Sampling for FPL decision-making. Chapter 9 presents the DDQN approach and the Bellman equation formulation, integrating MFG and MFC frameworks. Chapter 10 addresses constrained optimisation via knapsack and MILP methods. Chapter 11 describes the MLOps pipeline for deployment and monitoring. Chapter 12 presents the experimental results and evaluation, while Chapter 13 provides the conclusion and future work.
+The remainder of this dissertation is organised as follows. Chapter 2 provides a literature review positioning this work within the current landscape of sports analytics and machine learning. Chapter 3 details the data acquisition, feature engineering, and exploratory data analysis pipeline. Chapter 4 develops the theoretical foundations of Bayesian nonparametrics, including the CRP, DP, and HDP. Chapter 5 presents the HDP-GMM with Gaussian-Wishart base measure. Chapter 6 extends this to the HDP-HMM with temporal dynamics. Chapter 7 addresses posterior inference via MCMC and NUTS. Chapter 8 addresses constrained optimisation via knapsack and MILP methods. Chapter 9 develops Thompson Sampling for FPL decision-making. Chapter 10 presents the DDQN approach and Bellman equation formulation, integrating the MFG and MFC frameworks. Chapter 11 describes the MLOps pipeline for deployment and monitoring. Chapter 12 presents the experimental results and evaluation, while Chapter 13 provides the conclusion and future work.

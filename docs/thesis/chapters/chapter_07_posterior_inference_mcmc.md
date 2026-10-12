@@ -14,15 +14,15 @@ This chapter provides a comprehensive treatment of the posterior inference techn
 
 ### 7.1.1 From Posterior Inference to Belief-State Decision-Making
 
-It is critical to understand that the posterior samples produced by MCMC are **not endpoints** of the analysis — they are the **belief-state representation** that the decision engines in Chapters 8 and 9 operate on directly. The posterior samples over $(\mu_k, \Sigma_k, \pi_k, z)$ encode the full distributional uncertainty about each player's latent form profile. Thompson Sampling, Monte Carlo Tree Search, and DDQN all consume these belief states as their mathematical input.
+It is critical to understand that the posterior samples produced by MCMC are **not endpoints** of the analysis — they are the **belief-state representation** used by the decision methods in Chapters 9 and 10. The posterior samples over $(\mu_k, \Sigma_k, \pi_k, z)$ encode the full distributional uncertainty about each player's latent form profile. Thompson Sampling and Monte Carlo Tree Search are developed in Chapter 9, while DDQN is developed in Chapter 10.
 
-This connection formalizes the FPL problem as a **Partially Observable Markov Decision Process (POMDP)**, defined rigorously in Chapter 9 (Section 9.2). In a POMDP, the agent does not observe the true state $s_t$ (the player's actual form); instead, it maintains a **belief state** $b_t = P(s_t \mid \text{observations})$, which is precisely the posterior distribution computed by the MCMC methods in this chapter. The RL agents in subsequent chapters do not operate on point estimates; they operate on **distributions over belief states**, enabling them to reason about and hedge against uncertainty in a mathematically principled way.
+This connection formalizes the FPL problem as a **Partially Observable Markov Decision Process (POMDP)**, defined in Chapter 10 (Section 10.3). In a POMDP, the agent does not observe the true state $s_t$ (the player's actual form); instead, it maintains a **belief state** $b_t = P(s_t \mid \text{observations})$, which is precisely the posterior distribution computed by the MCMC methods in this chapter. The decision methods developed in subsequent chapters can use these beliefs to represent uncertainty about player form.
 
 The pipeline is:
 
-$$\text{MCMC (Ch. 7)} \;\rightarrow\; \{b_j^{(s)}(t)\}_{s=1}^S \;\rightarrow\; \text{Thompson Sampling (Ch. 8)} \;\rightarrow\; \text{TS+MCTS / DDQN (Ch. 9)}.$$
+$$\text{MCMC (Ch. 7)} \;\rightarrow\; \{b_j^{(s)}(t)\}_{s=1}^S \;\rightarrow\; \text{Thompson Sampling (Ch. 9)} \;\rightarrow\; \text{TS+MCTS / DDQN (Ch. 10)}.$$
 
-This chapter establishes the inference machinery; the next chapters show how these belief states drive optimal sequential decisions.
+This chapter establishes the inference machinery. Chapter 8 formulates the FPL constraints, and Chapters 9 and 10 develop sequential decision methods that use player-form beliefs.
 
 ## 7.2 Gibbs Sampling for the HDP-GMM
 
@@ -148,7 +148,7 @@ $$\langle \theta_{\text{end}} - \theta_{\text{start}}, \mathbf{r}_{\text{start}}
 
 NUTS is particularly effective for high-dimensional, correlated posteriors, as it adapts to the local geometry.
 
-### 6.4.3 NUTS Configuration
+### 7.4.3 NUTS Configuration
 
 The NUTS sampler is configured with the following settings:
 
@@ -191,9 +191,9 @@ NUTS is preferred when the model is non-conjugate (e.g., when incorporating neur
 
 ### 7.5.1 Motivation
 
-Bayesian nonparametric models like the HDP-GMM and HDP-HMM involve high-dimensional, recursive updates that are prohibitively slow in interpreted Python. For a player registry of $N \approx 10{,}000$ and $K \approx 20$ clusters, a single MCMC iteration involves over $200{,}000$ cluster membership evaluations. Traditional NumPy operations, while vectorised, still incur significant Python overhead for sequential algorithms like **Forward-Filtering Backward-Sampling (FFBS)**.
+Bayesian nonparametric models like the HDP-GMM and HDP-HMM involve high-dimensional, recursive updates that can be costly in interpreted Python. For a player registry of $N \approx 10{,}000$ and $K \approx 20$ clusters, a single MCMC iteration involves over $200{,}000$ cluster membership evaluations, before sequence- and model-specific calculations. Traditional NumPy operations are vectorised, but sequential algorithms like **Forward-Filtering Backward-Sampling (FFBS)** may still incur Python overhead; the relative runtime requires benchmarking.
 
-The system leverages **JAX** and its **XLA (Accelerated Linear Algebra)** compiler to bypass these bottlenecks. By JIT-compiling the critical inference kernels, the system achieves the sub-second iteration times required for real-time belief state updates.
+The proposed implementation uses **JAX** and its **XLA (Accelerated Linear Algebra)** compiler to address these bottlenecks. Sub-second iteration time is a target to test; Chapter 12, Section 12.9 is planned to report the measured runtime for the specified data size and hardware.
 
 ### 7.5.2 JIT Compilation and `lax.scan`
 
@@ -223,9 +223,9 @@ By compiling this entire recursive procedure, JAX eliminates the Python loop ove
 The use of JAX provides two critical advantages over alternative JIT technologies:
 
 1.  **Unified Memory Space**: Inferred parameters (means, covariances, belief states) remain in the JAX device memory, eliminating costly transfers between Python, Numba, and the GPU.
-2.  **Accelerator Support**: The same code runs on CPUs, GPUs, and TPUs with zero modifications. The XLA compiler automatically targets the available hardware, enabling the large-scale population simulations in Chapter 9 to scale to hundreds of thousands of agents on professional-grade hardware.
+2.  **Accelerator Support**: The design aims to let JAX/XLA target CPUs, GPUs, and TPUs with minimal code changes, subject to backend and kernel support. Evaluation would test whether the population simulations in Chapter 10 can scale to hundreds of thousands of agents on the available accelerator hardware.
 
-The speedup achieved via JAX/XLA JIT is comparable to C++ implementations:
+The following speedup ranges are proposed evaluation targets for JAX/XLA relative to interpreted NumPy/Python; they are not measured results:
 
 - **Forward Filtering**: 20–50x speedup via XLA loop fusion.
 - **Cluster Probabilities**: 10–20x speedup via `jax.vmap` vectorisation across $N$ observations.
@@ -334,11 +334,11 @@ For the FPL problem, MCMC is employed for offline model fitting (where accuracy 
 
 ## 7.7 Convergence Diagnostics
 
-Empirical convergence results for all diagnostics discussed in this section are reported in Chapter 12, Section 12.3, including trace plots, Gelman-Rubin $\hat{R}$ values, Effective Sample Size (ESS), and Geweke z-scores for the FPL dataset.
+Chapter 12, Section 12.3 is planned to report convergence diagnostics for the FPL dataset: trace plots, Gelman-Rubin $\hat{R}$ values, Effective Sample Size (ESS), and Geweke z-scores. These results have not yet been supplied.
 
 ### 7.7.1 Trace Plots
 
-The simplest diagnostic is a visual inspection of the trace plots — the sampled values of each parameter plotted against iteration number. A well-mixing chain shows rapid fluctuations around a stable mean, with no trends or long excursions. Chapter 12, Figure 12.1 presents trace plots of $\gamma$, $\alpha$, and representative $\mu_k$ diagonal elements across the 4 MCMC chains.
+The simplest diagnostic is a visual inspection of the trace plots — the sampled values of each parameter plotted against iteration number. A well-mixing chain shows rapid fluctuations around a stable mean, with no trends or long excursions. Chapter 12, Figure 12.1 is reserved for trace plots of $\gamma$, $\alpha$, and representative $\mu_k$ diagonal elements across the 4 MCMC chains.
 
 ### 7.7.2 Gelman-Rubin $\hat{R}$ Statistic
 
@@ -346,7 +346,7 @@ The $\hat{R}$ statistic compares the within-chain and between-chain variances ac
 
 $$\hat{R} = \sqrt{\frac{\hat{V}}{W}},$$
 
-where $W$ is the within-chain variance and $\hat{V}$ is a pooled estimate combining within- and between-chain variance. Convergence is indicated when $\hat{R} < 1.01$ for all parameters. Chapter 12, Table 12.1 reports $\hat{R}$ values for all monitored parameters; all satisfy the $\hat{R} < 1.01$ threshold.
+where $W$ is the within-chain variance and $\hat{V}$ is a pooled estimate combining within- and between-chain variance. Convergence is indicated when $\hat{R} < 1.01$ for all parameters. Chapter 12, Table 12.1 is planned to report $\hat{R}$ values for all monitored parameters and assess them against the $\hat{R} < 1.01$ threshold.
 
 ### 7.7.3 Effective Sample Size (ESS)
 
@@ -354,7 +354,7 @@ The ESS quantifies the number of independent samples equivalent to the correlate
 
 $$\text{ESS} = \frac{N}{1 + 2 \sum_{t=1}^\infty \rho_t},$$
 
-where $\rho_t$ is the autocorrelation at lag $t$. Low ESS indicates high autocorrelation and poor mixing. The threshold $\text{ESS} > 400$ is required for reliable inference. All parameters meet this threshold (Chapter 12, Table 12.1).
+where $\rho_t$ is the autocorrelation at lag $t$. Low ESS indicates high autocorrelation and poor mixing. The threshold $\text{ESS} > 400$ is used here as a target for reliable inference; Chapter 12, Table 12.1 is planned to report whether monitored parameters meet it.
 
 ### 7.7.4 Geweke Diagnostic
 
@@ -362,7 +362,7 @@ The Geweke diagnostic compares the means of the early and late portions of the c
 
 $$z = \frac{\bar{\theta}_A - \bar{\theta}_B}{\sqrt{\text{Var}(\bar{\theta}_A) + \text{Var}(\bar{\theta}_B)}},$$
 
-where $A$ is the first 10% of the chain and $B$ is the last 50%. Under convergence, $z \sim \mathcal{N}(0, 1)$. Values $|z| > 2$ indicate non-convergence. All Geweke z-scores fall within $[-2, 2]$ (Chapter 12, Table 12.1).
+where $A$ is the first 10% of the chain and $B$ is the last 50%. Under convergence, $z \sim \mathcal{N}(0, 1)$. Values $|z| > 2$ indicate non-convergence. Chapter 12, Table 12.1 is planned to report the Geweke z-scores and assess them against the $[-2, 2]$ range.
 
 ### 7.7.5 Raftery-Lewis Diagnostic
 
@@ -382,42 +382,31 @@ $$\frac{\partial}{\partial \gamma} \log p(z_n \mid z_{1:n-1}, \gamma) = \frac{1}
 
 where $\psi$ is the digamma function.
 
-This online update allows the model to adapt the number of clusters as new data arrives, without requiring a full re-run of the MCMC chain. In practice, the KL divergence between consecutive gameweek belief states, $\text{KL}(b_{t} \parallel b_{t-1})$, is monitored, and ASUGS adaptation is triggered when this exceeds a threshold. This drift detection mechanism is evaluated empirically in Chapter 12, Section 12.8, which plots $\text{KL}_{\text{pop}}(t)$ over the season and identifies gameweeks where retraining was triggered.
+This online update allows the model to adapt the number of clusters as new data arrives, without requiring a full re-run of the MCMC chain. The proposed monitoring procedure tracks the KL divergence between consecutive gameweek belief states, $\text{KL}(b_{t} \parallel b_{t-1})$, and triggers ASUGS adaptation when it exceeds a threshold. Chapter 12, Section 12.8 is planned to evaluate this drift-detection procedure by plotting $\text{KL}_{\text{pop}}(t)$ over the season and identifying any gameweeks where retraining would be triggered.
 
 ## 7.9 From Posterior to Belief State
 
 ### 7.9.1 The Belief-State Mapping
 
-The posterior samples produced by the MCMC methods in this chapter are not merely statistical summaries — they constitute the **belief-state representation** that the decision engines in Chapters 8 and 9 operate on directly. Formally, for each player $j$ at gameweek $t$, the belief state over latent form clusters is:
+The posterior samples produced by the MCMC methods in this chapter are not merely statistical summaries — they constitute the **belief-state representation** used by the decision methods in Chapters 9 and 10. Formally, for each player $j$ at gameweek $t$, the belief state over latent form clusters is:
 
 $$b_j(t) = \left( P(z_{j,t} = 1 \mid x_{j,1:t}), \; P(z_{j,t} = 2 \mid x_{j,1:t}), \; \ldots, \; P(z_{j,t} = K \mid x_{j,1:t}) \right).$$
 
 For each MCMC sample $s \in \{1, \ldots, S\}$, the belief state is computed using the sampled cluster parameters $(\mu_k^{(s)}, \Sigma_k^{(s)})$ and transition matrices $\pi_k^{(s)}$. The collection $\{b_j^{(s)}(t)\}_{s=1}^S$ forms the **posterior distribution over belief states**, which fully captures the epistemic uncertainty about player $j$'s form at gameweek $t$.
 
-### 7.9.2 Belief-State MDP
+### 7.9.2 Decision Interface and Chapter 10 Pointer
 
-This belief-state formulation converts the FPL problem into a **belief-state Markov Decision Process (MDP)**, a standard transformation for POMDPs (Åström, 1965). In the belief-state MDP:
-
-- **State**: The belief vector $b_t = (b_1(t), \ldots, b_N(t))$ for all $N$ players in the registry, augmented with the manager's squad, budget, and chip availability.
-- **Action**: Transfers, lineup selection, captaincy choice, and chip deployment.
-- **Transition**: $P(b_{t+1} \mid b_t, a_t)$, induced by the HDP-HMM transition matrices and the Bayesian belief update upon observing new data.
-- **Reward**: $R(b_t, a_t) = \mathbb{E}_{s \sim b_t}[R(s, a_t)]$, the expected FPL points under the belief distribution.
-
-The key insight is that **the RL agents in Chapters 8 and 9 do not operate on point estimates** (e.g., the MAP cluster assignment $\arg\max_k b_j^{(k)}(t)$). Instead, they operate on the **full distribution** $\{b_j^{(s)}(t)\}_{s=1}^S$, enabling them to:
-
-1. **Hedge against uncertainty**: Thompson Sampling samples one belief state $\tilde{b}_j \sim \{b_j^{(s)}(t)\}_{s=1}^S$ and acts optimally with respect to it, naturally exploring when uncertainty is high.
-2. **Plan across plausible worlds**: MCTS (Chapter 9, Section 9.8) builds a search tree where each node branches over multiple sampled belief states, explicitly evaluating decisions across different form scenarios.
-3. **Learn robust value functions**: DDQN (Chapter 9, Section 9.5) takes the belief vector $b_j(t)$ as input to its state representation, learning to map distributional uncertainty into long-term value estimates.
+The inference output is the posterior sample collection $\{b_j^{(s)}(t)\}_{s=1}^S$, which retains uncertainty over each player's latent form rather than collapsing it to a single MAP assignment $\arg\max_k b_j^{(k)}(t)$. Thompson Sampling and MCTS consume sampled belief states (Chapter 9); DDQN uses the belief representation in its state input (Chapter 10). Chapter 10, Section 10.3 gives the formal POMDP and belief-state MDP definitions.
 
 ### 7.9.3 Empirical Evaluation of Belief-State Quality
 
-The quality of the belief states — their smoothness, entropy, and predictive power — directly determines the performance of all downstream decision engines. Chapter 12, Section 12.4 provides a detailed cluster interpretability analysis, including:
+The quality of the belief states — their smoothness, entropy, and predictive power — may affect downstream decision performance. Chapter 12, Section 12.4 is planned to provide a cluster interpretability analysis, including:
 
 - The number of active form clusters discovered per position group (GK, DEF, MID, FWD).
 - Cluster means and transition matrix heatmaps.
 - Example player trajectories plotting $z_{j,t}$ over gameweeks.
 
-Furthermore, **Ablation 1** in Chapter 12 (Section 12.5.1) directly compares the belief states produced by the iid HDP-GMM against the temporal HDP-HMM, evaluating prediction MAE, cluster stability, and belief state entropy. The hypothesis is that the HDP-HMM produces smoother, more predictive belief states due to its explicit modelling of form persistence.
+Furthermore, **Ablation 1** in Chapter 12 (Section 12.5.1) is planned to compare belief states produced by the iid HDP-GMM and temporal HDP-HMM using prediction MAE, cluster stability, and belief-state entropy. The hypothesis is that the HDP-HMM produces smoother, more predictive belief states due to its explicit modelling of form persistence.
 
 ## 7.10 Production Implementation Notes
 
@@ -449,8 +438,8 @@ with $\epsilon = 10^{-10}$. The population-level drift $\text{KL}_{\text{pop}}(t
 
 ## 7.11 Summary
 
-This chapter has provided a comprehensive treatment of posterior inference for the HDP-GMM and HDP-HMM. Gibbs sampling with conjugate updates provides exact (asymptotic) posterior samples. NUTS via NumPyro handles non-conjugate models with automatic gradient computation. JAX/XLA accelerates all conjugate computations (MVN, NIW, FFBS) into hardware-agnostic JIT-compiled kernels, replacing the original Numba-based approach. Variational Inference offers a faster alternative for online updates. A suite of convergence diagnostics ensures reliable inference. The ASUGS algorithm, coupled with KL-divergence drift detection, enables event-driven online adaptation of concentration parameters.
+This chapter has set out posterior inference methods for the HDP-GMM and HDP-HMM. Gibbs sampling with conjugate updates targets exact posterior sampling at equilibrium, while NUTS via NumPyro handles non-conjugate models with automatic gradient computation. JAX/XLA kernels are specified for compiling conjugate computations (MVN, NIW, FFBS); runtime gains over the original Numba-based approach require benchmarking. Variational Inference is a candidate faster alternative for online updates, with its trade-offs against MCMC to be evaluated. Convergence diagnostics are specified to assess inference reliability. ASUGS coupled with KL-divergence drift detection defines a proposed event-driven adaptation strategy, planned for evaluation in Chapter 12.
 
-Most importantly, Section 7.9 has established that the MCMC posterior samples are not isolated statistical outputs — they are the **belief-state representation** that forms the mathematical input to all downstream decision engines. Thompson Sampling (Chapter 8) samples from these belief states to achieve natural exploration. MCTS (Chapter 9) plans across sampled belief states for multi-gameweek lookahead. DDQN (Chapter 9) learns to map belief-state uncertainty into long-term value estimates.
+Most importantly, Section 7.9 has established that the MCMC posterior samples are not isolated statistical outputs — they are the **belief-state representation** that forms the mathematical input to downstream decision methods. Thompson Sampling (Chapter 9) samples from these belief states to achieve natural exploration. MCTS (Chapter 9, Section 9.8) plans across sampled belief states for multi-gameweek lookahead. DDQN (Chapter 10) learns to map belief-state uncertainty into long-term value estimates.
 
-The next chapter shows how these belief states drive Thompson Sampling decisions, the first step (Step A) in the three-stage planning hierarchy.
+Chapter 8 presents the constrained optimisation layer. Chapter 9 then develops Thompson Sampling as Step A in the three-stage planning hierarchy, using the belief states established here.

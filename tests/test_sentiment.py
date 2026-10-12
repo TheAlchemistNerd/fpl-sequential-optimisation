@@ -268,13 +268,18 @@ class TestPrecollectedArticles:
     def test_compute_sentiment_from_precollected_grouping(self, mock_score, sample_precollected_articles):
         from src.data.sentiment import compute_sentiment_from_precollected
         mock_score.side_effect = [
+            [0.8],  # Haaland GW1
+            [-0.2, 0.4],  # Haaland GW2
             [0.6, -0.3],  # Salah GW1
-            [0.8, -0.2, 0.4],  # Haaland GW1 and GW2 (grouped)
         ]
 
         result = compute_sentiment_from_precollected(sample_precollected_articles)
-        # Check grouping: Salah GW1 should have 2 articles
+        assert len(result) == 3
+        haaland_gw1 = result[(result["player_name"] == "Haaland") & (result["gameweek"] == 1)]
+        haaland_gw2 = result[(result["player_name"] == "Haaland") & (result["gameweek"] == 2)]
         salah_gw1 = result[(result["player_name"] == "Salah") & (result["gameweek"] == 1)]
+        assert haaland_gw1["n_articles"].iloc[0] == 1
+        assert haaland_gw2["n_articles"].iloc[0] == 2
         assert len(salah_gw1) == 1
         assert salah_gw1["n_articles"].iloc[0] == 2
 
