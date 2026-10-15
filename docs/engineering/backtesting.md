@@ -2,7 +2,9 @@
 
 ## Purpose
 
-The replay compares decision policies over a completed FPL season using a common initial squad, a chronological player-information set, a simulated bank and purchase prices, and realized gameweek points. The first supported archive is Vaastav's `data/<season>/gws/merged_gw.csv`.
+The replay compares decision policies over a completed FPL season using a common initial squad, a chronological player-information set, a simulated bank and purchase prices, and realized gameweek points. The historical archive comes from [Vaastav Anand's Fantasy Premier League repository](https://github.com/vaastav/Fantasy-Premier-League), under `data/<season>/gws/`. The 2023–24 pilot used [`data/2023-24/gws/merged_gw.csv`](https://github.com/vaastav/Fantasy-Premier-League/blob/master/data/2023-24/gws/merged_gw.csv).
+
+Check the selected season directory before downloading: the repository README's structure overview spells the merged filename `merged_gws.csv`, while its example path uses `merged_gw.csv`. The pilot metadata records the SHA-256 of the actual input file so the run can be tied to the exact dataset contents.
 
 The initial challenger set is deliberately small:
 
