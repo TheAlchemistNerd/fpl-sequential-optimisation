@@ -152,3 +152,32 @@ def test_hold_policy_runs_chronological_backtest():
     assert result.gameweeks.iloc[1]["transfers"] == 0
     assert result.gameweeks.iloc[1]["free_transfers_next_gw"] == 2
     assert result.metadata["dataset_sha256"] is None
+
+
+def test_model_score_backtest_uses_saved_predictions_from_common_evaluation_start():
+    from src.backtesting.engine import run_backtest
+
+    history = _small_history(weeks=3)
+    ids = sorted(history["player_id"].unique())
+    predictions = pd.DataFrame(
+        [
+            {
+                "gameweek": gw,
+                "player_id": player_id,
+                "hdp_gmm": float(player_id),
+                "hdp_hmm": float(30 - player_id),
+            }
+            for gw in (2, 3)
+            for player_id in ids
+        ]
+    )
+    result = run_backtest(
+        history,
+        strategies=("hdp_gmm_milp",),
+        seeds=(17,),
+        prediction_ledger=predictions,
+        evaluation_start_gameweek=2,
+    )
+    assert result.summary.iloc[0]["evaluation_gameweeks"] == 2
+    assert result.gameweeks["is_evaluation_gameweek"].tolist() == [False, True, True]
+    assert result.gameweeks.iloc[1]["transfers"] <= 2

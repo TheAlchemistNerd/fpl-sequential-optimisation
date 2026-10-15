@@ -254,6 +254,8 @@ class TestHDPGMMRun:
         assert "alpha_mean" in summary
         assert "active_clusters" in summary
         assert "global_weights" in summary
+        assert samples["player_weights"].shape == (200, n_players, 10)
+        assert np.allclose(samples["player_weights"].sum(axis=-1), 1.0, atol=1e-5)
 
     def test_summary_has_gaussian_wishart_params(self, single_player_series):
         data, pids, n_players = single_player_series

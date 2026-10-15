@@ -20,6 +20,8 @@ StrategyName = Literal[
     "xg_milp",
     "thompson_nb_milp",
     "random_valid",
+    "hdp_gmm_milp",
+    "hdp_hmm_milp",
 ]
 STRATEGIES: tuple[StrategyName, ...] = (
     "hold",
@@ -27,7 +29,13 @@ STRATEGIES: tuple[StrategyName, ...] = (
     "xg_milp",
     "thompson_nb_milp",
     "random_valid",
+    "hdp_gmm_milp",
+    "hdp_hmm_milp",
 )
+PREDICTION_STRATEGIES = {
+    "hdp_gmm_milp": "hdp_gmm",
+    "hdp_hmm_milp": "hdp_hmm",
+}
 POSITION_COUNTS = {"GK": 2, "DEF": 5, "MID": 5, "FWD": 3}
 
 
@@ -53,6 +61,7 @@ def make_decision(
     *,
     bank_balance: float | None = None,
     current_sell_prices: dict[int, float] | None = None,
+    predicted_points: dict[int, float] | None = None,
 ) -> Decision:
     """Choose this GW's action from a point-in-time player feature table."""
     if strategy == "random_valid" and bank_balance is None:
@@ -80,10 +89,26 @@ def make_decision(
         "form_milp": "form_points",
         "xg_milp": "xgi_points",
     }.get(strategy, "form_points")
-    point_map = {
-        int(row.player_id): float(getattr(row, score_column))
-        for row in players.itertuples(index=False)
-    }
+    if strategy in PREDICTION_STRATEGIES:
+        if predicted_points is None:
+            raise ValueError(f"{strategy} requires a point-in-time prediction map")
+        missing_predictions = set(players["player_id"].astype(int)) - set(predicted_points)
+        if missing_predictions:
+            raise ValueError(
+                f"Missing {strategy} predictions for players: {sorted(missing_predictions)}"
+            )
+        score_column = "_model_prediction"
+        players = players.copy()
+        players[score_column] = players["player_id"].map(predicted_points)
+        point_map = {
+            int(player_id): float(score)
+            for player_id, score in zip(players["player_id"], players[score_column])
+        }
+    else:
+        point_map = {
+            int(row.player_id): float(getattr(row, score_column))
+            for row in players.itertuples(index=False)
+        }
     if strategy == "random_valid":
         # Random objective weights make this a feasible stochastic policy
         # under the same squad, wallet, transfer, and hit constraints.

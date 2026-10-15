@@ -12,6 +12,8 @@ def prepare_hmm_sequences(
     data: np.ndarray,
     player_ids: np.ndarray,
     actions: np.ndarray,
+    *,
+    max_timesteps: int | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Groups tabular (N, D) data into padded (P, T_max, D) sequences for JAX.
@@ -29,7 +31,12 @@ def prepare_hmm_sequences(
     
     # Identify sequence lengths
     lengths = [np.sum(player_ids == pid) for pid in unique_pids]
-    max_T = max(lengths)
+    observed_max_T = max(lengths)
+    max_T = observed_max_T if max_timesteps is None else int(max_timesteps)
+    if max_T < observed_max_T:
+        raise ValueError(
+            f"max_timesteps={max_T} is smaller than observed sequence length {observed_max_T}"
+        )
     
     padded_data = np.zeros((num_players, max_T, D), dtype=np.float32)
     padded_actions = np.zeros((num_players, max_T, A), dtype=np.float32)

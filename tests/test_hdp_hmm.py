@@ -73,8 +73,8 @@ class TestHDPHMMRun:
         assert "active_clusters" in summary
         assert "mu_means" in summary
         assert "precision_means" in summary
-        assert "trans_beta_mean" in summary
-        assert "kappa_mean" in summary
+        assert "trans_probs_mean" in summary
+        assert "alpha_mean" in summary
 
     def test_transition_matrix_shape(self, synthetic_hmm_data):
         from src.models.hdp_hmm import run_hdp_hmm
@@ -88,10 +88,11 @@ class TestHDPHMMRun:
 
         T = 8
         A = 2
-        tb = summary["trans_beta_mean"]
-        assert tb.shape == (A, T, T-1), (
-            f"Transition beta mean must be ({A}, {T}, {T-1}), got {tb.shape}"
+        transitions = summary["trans_probs_mean"]
+        assert transitions.shape == (A, T, T), (
+            f"Transition probabilities must be ({A}, {T}, {T}), got {transitions.shape}"
         )
+        assert np.allclose(transitions.sum(axis=-1), 1.0, atol=1e-5)
 
     def test_precision_is_full_matrix(self, synthetic_hmm_data):
         from src.models.hdp_hmm import run_hdp_hmm
@@ -107,3 +108,19 @@ class TestHDPHMMRun:
         assert prec.ndim == 3, (
             f"Precision must be (T, D, D), got {prec.shape}"
         )
+
+
+def test_prepare_hmm_sequences_supports_fixed_padding():
+    from src.utils.jax_helpers import prepare_hmm_sequences
+
+    data = np.arange(10, dtype=np.float32).reshape(5, 2)
+    player_ids = np.array([0, 0, 1, 1, 1], dtype=np.int32)
+    actions = np.ones((5, 1), dtype=np.float32)
+    padded, padded_actions, mask = prepare_hmm_sequences(
+        data, player_ids, actions, max_timesteps=5
+    )
+    assert padded.shape == (2, 5, 2)
+    assert padded_actions.shape == (2, 5, 1)
+    assert mask.sum(axis=1).tolist() == [2.0, 3.0]
+    with pytest.raises(ValueError, match="smaller than observed"):
+        prepare_hmm_sequences(data, player_ids, actions, max_timesteps=2)

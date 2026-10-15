@@ -1,0 +1,166 @@
+{
+  "status": "diagnostic_complete",
+  "season": "2023-24",
+  "source_file_name": "fpl_2023_24_merged_gw.csv",
+  "source_sha256": "e9c09c8856f1c86b4f920f46ddd5033af83409439dfda53be925df2a3e7c8a9e",
+  "first_gameweek": 7,
+  "last_gameweek": 7,
+  "maximum_training_sequence_length": 5,
+  "training_padding_rule": "each fold is padded only to the latest completed training week",
+  "feature_cutoff_rule": "strictly before each target gameweek",
+  "feature_lookback_gameweeks": 5,
+  "max_stale_gameweeks": 5,
+  "fit_roster_selected_from_gw1": [
+    44,
+    77,
+    106,
+    188,
+    254,
+    275,
+    328,
+    366,
+    406,
+    409,
+    473,
+    476,
+    491,
+    497,
+    501,
+    514,
+    539,
+    558,
+    562,
+    571,
+    590,
+    600,
+    619,
+    647
+  ],
+  "players_per_position": 6,
+  "seed": 42,
+  "num_warmup": 200,
+  "num_samples": 50,
+  "num_chains": 1,
+  "nuts_target_accept_prob": 0.99,
+  "chain_method_requested": "parallel",
+  "truncation": 4,
+  "runtime_versions": {
+    "python": "3.13.12",
+    "platform": "Windows-10-10.0.19045-SP0",
+    "jax": "0.8.0",
+    "jaxlib": "0.8.0",
+    "numpyro": "0.19.0",
+    "numpy": "2.3.4",
+    "pandas": "2.3.3",
+    "scipy": "1.18.1",
+    "scikit-learn": "1.7.2",
+    "jax_local_device_count": "1"
+  },
+  "inference": {
+    "sampler": "NumPyro NUTS",
+    "gmm_likelihood": "exact finite-mixture marginal; categorical states integrated out",
+    "hmm_likelihood": "masked forward algorithm"
+  },
+  "model_features": [
+    "form_points",
+    "form_std",
+    "xgi_points",
+    "appearance_probability",
+    "expected_minutes",
+    "pos_GK",
+    "pos_DEF",
+    "pos_MID",
+    "pos_FWD"
+  ],
+  "caveats": [
+    "Vaastav merged rows proxy information available before each deadline; no official dated deadline snapshots are present.",
+    "HDP models are fitted to a reproducible GW1-stratified player cohort; other candidates use population-level state weights.",
+    "The HMM uses one neutral action category because historical manager-action sequences are unavailable.",
+    "State-conditioned points are estimated from earlier realized player-gameweek outcomes, not from a direct points-emission model.",
+    "One archived season is a pilot and cannot establish cross-season generalization.",
+    "One chain and 50 retained draws are a diagnostic pilot, not a convergence assessment.",
+    "The squad comparison covers only GW7 for seed 42 after holding a shared GW1 squad through GW6.",
+    "No later gameweek folds were fitted, scored, or replayed."
+  ],
+  "last_forecast_gameweek_written": 7,
+  "source_url": "https://github.com/vaastav/Fantasy-Premier-League/blob/master/data/2023-24/gws/merged_gw.csv",
+  "source_coverage": {
+    "normalized_player_gameweek_rows": 28742,
+    "unique_players": 865,
+    "first_gameweek": 1,
+    "last_gameweek": 38
+  },
+  "run_scope": "GW7 one-fold sampler and downstream evaluation diagnostic; not a full-season run",
+  "retained_draws_per_model": 50,
+  "diagnostic_gate": {
+    "maximum_divergence_rate": 0.01,
+    "minimum_mean_acceptance_probability": 0.5,
+    "passed_for_all_models": true
+  },
+  "valid_forecast_gameweeks": [
+    7
+  ],
+  "scored_gameweeks": [
+    7
+  ],
+  "squad_replay_gameweeks": 7,
+  "evaluation_gameweeks": 1,
+  "prediction_metrics": [
+    {
+      "model": "hdp_gmm",
+      "n": 718,
+      "mae": 2.1002938064732604,
+      "rmse": 2.7315909606544064,
+      "mean_error": 0.9680460731674889,
+      "spearman": 0.17750555537372958
+    },
+    {
+      "model": "hdp_hmm",
+      "n": 718,
+      "mae": 2.1071433295357465,
+      "rmse": 2.7877499699294788,
+      "mean_error": 0.8397109305811455,
+      "spearman": 0.1280448466248498
+    },
+    {
+      "model": "rolling_form",
+      "n": 718,
+      "mae": 1.0963788300835655,
+      "rmse": 2.1432741926625853,
+      "mean_error": -0.08328690807799444,
+      "spearman": 0.6448573533718406
+    }
+  ],
+  "squad_evaluation_summary": [
+    {
+      "strategy": "form_milp",
+      "evaluation_net_points": 25.0,
+      "evaluation_gross_points": 45.0,
+      "evaluation_transfer_hits": 20,
+      "evaluation_transfers": 7,
+      "evaluation_gameweeks": 1
+    },
+    {
+      "strategy": "hdp_hmm_milp",
+      "evaluation_net_points": 13.0,
+      "evaluation_gross_points": 13.0,
+      "evaluation_transfer_hits": 0,
+      "evaluation_transfers": 2,
+      "evaluation_gameweeks": 1
+    },
+    {
+      "strategy": "hdp_gmm_milp",
+      "evaluation_net_points": 9.0,
+      "evaluation_gross_points": 9.0,
+      "evaluation_transfer_hits": 0,
+      "evaluation_transfers": 2,
+      "evaluation_gameweeks": 1
+    }
+  ],
+  "figures": [
+    "figures\\prediction_error_by_gameweek.png",
+    "figures\\prediction_rank_correlation_by_gameweek.png",
+    "figures\\prediction_mae_by_position.png",
+    "figures\\cumulative_squad_points.png"
+  ]
+}

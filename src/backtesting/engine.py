@@ -15,6 +15,7 @@ from src.backtesting.data import build_as_of_features, outcomes_for_gameweek
 from src.backtesting.strategies import (
     STRATEGIES,
     Decision,
+    PREDICTION_STRATEGIES,
     StrategyName,
     make_decision,
     random_valid_decision,
@@ -109,6 +110,8 @@ def run_backtest(
     max_stale_gameweeks: int = 5,
     free_transfer_cap: int = MAX_FREE_TRANSFERS_2023_24,
     dataset_sha256: str | None = None,
+    prediction_ledger: pd.DataFrame | None = None,
+    evaluation_start_gameweek: int = 1,
 ) -> BacktestResult:
     """Replay strategies in chronological order using strictly lagged features.
 
@@ -145,6 +148,18 @@ def run_backtest(
         raise ValueError(f"Unknown strategies: {sorted(unknown)}")
     if len(set(strategy_list)) != len(strategy_list):
         raise ValueError("Each strategy may appear only once")
+    if not weeks[0] <= evaluation_start_gameweek <= weeks[-1]:
+        raise ValueError("evaluation_start_gameweek must be within the replay season")
+    if set(strategy_list) & set(PREDICTION_STRATEGIES) and prediction_ledger is None:
+        raise ValueError("Model-based strategies require a saved prediction ledger")
+    if prediction_ledger is not None:
+        required_prediction_columns = {"gameweek", "player_id", *PREDICTION_STRATEGIES.values()}
+        missing_prediction_columns = required_prediction_columns - set(prediction_ledger.columns)
+        if missing_prediction_columns:
+            raise ValueError(
+                "Prediction ledger is missing columns: "
+                f"{sorted(missing_prediction_columns)}"
+            )
 
     rows: list[dict[str, object]] = []
     for seed in seed_list:
@@ -201,8 +216,21 @@ def run_backtest(
                         ) / 10.0
                         for pid in squad
                     }
+                    decision_strategy = strategy
+                    predicted_points = None
+                    if gw < evaluation_start_gameweek:
+                        decision_strategy = "hold"
+                    elif strategy in PREDICTION_STRATEGIES:
+                        fold_predictions = prediction_ledger.loc[
+                            prediction_ledger["gameweek"].astype(int) == gw,
+                            ["player_id", PREDICTION_STRATEGIES[strategy]],
+                        ].drop_duplicates("player_id")
+                        predicted_points = {
+                            int(row.player_id): float(getattr(row, PREDICTION_STRATEGIES[strategy]))
+                            for row in fold_predictions.itertuples(index=False)
+                        }
                     decision = make_decision(
-                        strategy,
+                        decision_strategy,
                         players,
                         squad,
                         budget=None,
@@ -210,6 +238,7 @@ def run_backtest(
                         rng=rng,
                         bank_balance=bank_tenths / 10.0,
                         current_sell_prices=current_sell_prices,
+                        predicted_points=predicted_points,
                     )
                     n_transfers = len(set(squad) ^ set(decision.squad)) // 2
                     hit = HIT_PER_EXTRA_TRANSFER * max(0, n_transfers - free_transfers)
@@ -255,10 +284,23 @@ def run_backtest(
                         "bank_tenths": int(bank_tenths),
                         "squad_value_tenths": int(squad_value_tenths),
                         "squad": ",".join(str(pid) for pid in sorted(squad)),
+                        "is_evaluation_gameweek": gw >= evaluation_start_gameweek,
                     }
                 )
 
     weekly = pd.DataFrame(rows)
+    weekly["evaluation_net_points"] = weekly["net_points"].where(
+        weekly["is_evaluation_gameweek"], 0.0
+    )
+    weekly["evaluation_gross_points"] = weekly["gross_points"].where(
+        weekly["is_evaluation_gameweek"], 0.0
+    )
+    weekly["evaluation_transfer_hits"] = weekly["transfer_hits"].where(
+        weekly["is_evaluation_gameweek"], 0
+    )
+    weekly["evaluation_transfers"] = weekly["transfers"].where(
+        weekly["is_evaluation_gameweek"], 0
+    )
     summary = (
         weekly.groupby(["season", "seed", "strategy"], as_index=False)
         .agg(
@@ -268,6 +310,11 @@ def run_backtest(
             total_transfers=("transfers", "sum"),
             mean_weekly_points=("net_points", "mean"),
             gameweeks=("gameweek", "count"),
+            evaluation_net_points=("evaluation_net_points", "sum"),
+            evaluation_gross_points=("evaluation_gross_points", "sum"),
+            evaluation_transfer_hits=("evaluation_transfer_hits", "sum"),
+            evaluation_transfers=("evaluation_transfers", "sum"),
+            evaluation_gameweeks=("is_evaluation_gameweek", "sum"),
         )
         .sort_values(["seed", "total_net_points"], ascending=[True, False])
         .reset_index(drop=True)
@@ -282,6 +329,7 @@ def run_backtest(
         "max_stale_gameweeks": max_stale_gameweeks,
         "starting_budget_tenths": STARTING_BUDGET_TENTHS,
         "free_transfer_cap": free_transfer_cap,
+        "evaluation_start_gameweek": evaluation_start_gameweek,
         "dataset_sha256": dataset_sha256,
         "caveats": [
             "Vaastav merged data does not contain official deadline availability snapshots.",
