@@ -157,25 +157,23 @@ four-model evaluation.
 
 ## Current run checkpoint
 
-At 2026-10-16 16:59 Africa/Nairobi, the local sampler process (PID 8932) was
-still active and metadata reported `status: running`. The durable forecast
-ledger contains 8,882 forecasts through GW18, with unique player-week keys,
-finite predictions, and `feature_cutoff_gameweek = gameweek - 1` in every row.
-All 24 fit diagnostics for these twelve forecast folds passed. A 25th
-diagnostic row records a passing GW19 GMM fit; the GW19 HMM diagnostic is
-pending, so the runner has not yet written GW19 forecasts.
+At 2026-10-16 17:25 Africa/Nairobi, the local sampler process (PID 8932) was
+still active and metadata reported `status: running` through GW19. The durable
+forecast ledger contains 9,651 forecasts across GW7–GW19, with unique
+player-week keys, and finite predictions. Every row records
+`feature_cutoff_gameweek` as the target gameweek minus one. All 26 fit
+diagnostics for these thirteen forecast folds passed.
 
 | Fold / model | Training rows | Fit players | Active states | Divergences | Mean acceptance | Screen |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | GW18 HDP-GMM | 384 | 24 | 3 | 0 / 50 | 0.9998 | Pass |
 | GW18 HDP-HMM | 384 | 24 | 4 | 0 / 50 | 1.0000 | Pass |
-| GW19 HDP-GMM | 408 | 24 | 2 | 0 / 50 | 0.9873 | Pass; HMM pending |
+| GW19 HDP-GMM | 408 | 24 | 2 | 0 / 50 | 0.9873 | Pass |
+| GW19 HDP-HMM | 408 | 24 | 2 | 0 / 50 | 0.9971 | Pass |
 
-The GW18 HMM diagnostic was written about 39 minutes after its GMM diagnostic.
-At the 17:21 check, the GW19 HMM sampler remained CPU-active about 33 minutes
-after its GMM diagnostic; no GW19 HMM diagnostic or forecast had been written.
+The GW19 HMM diagnostic was written about 37 minutes after its GMM diagnostic.
 These are screening results from one chain with 50 retained draws, not evidence
-of posterior convergence. GW19–GW38 and the full-range four-predictor
+of posterior convergence. GW20–GW38 and the full-range four-predictor
 evaluation remain pending. The observed fold duration is not a full-run ETA.
 
 ## Interim four-predictor comparison: GW7–GW17
