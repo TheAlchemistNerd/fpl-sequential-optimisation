@@ -157,15 +157,21 @@ four-model evaluation.
 
 ## Current run checkpoint
 
-At 2026-10-16 15:41 Africa/Nairobi, the local sampler process (PID 8932) was
-still active. The core metadata reported `status: running` through GW17, with
-8,117 forecast rows across GW7–GW17. Both GW17 fits passed: GMM had 0/50
-divergences and mean acceptance 0.9576; HMM had 0/50 divergences and mean
-acceptance 0.9876. All 22 diagnostic rows for GW7–GW17 passed. The durable
-ledger has unique player-week keys, finite predictions, and the expected cutoff
-in every row (`feature_cutoff_gameweek = gameweek - 1`). GW18 onward and the
-full-range four-predictor evaluation remain pending. The fold runtime observed
-locally is not a full-run ETA.
+At 2026-10-16 16:09 Africa/Nairobi, the local sampler process (PID 8932) was
+still active. Core metadata remained `status: running` through GW17, with 8,117
+forecast rows across GW7–GW17. Both GW17 fits passed: GMM had 0/50 divergences
+and mean acceptance 0.9576; HMM had 0/50 divergences and mean acceptance
+0.9876. All 22 diagnostics for those completed folds passed. The durable ledger
+has unique player-week keys, finite predictions, and the expected cutoff in
+every row (`feature_cutoff_gameweek = gameweek - 1`).
+
+The GW18 GMM diagnostic was written at 15:45:37: 0/50 divergences and mean
+acceptance 0.9998. At the 16:09 check, its HMM fit had sampled for about 24
+minutes without writing a diagnostic or failure. The diagnostics file therefore
+has one orphan GMM row for the unfinished fold, but no GW18 forecast rows have
+been appended; the runner writes a fold only after both models pass. The full
+GW18 forecast and later weeks, and the full-range four-predictor evaluation,
+remain pending. This local fold duration is not a full-run ETA.
 
 ## Interim four-predictor comparison: GW7–GW17
 
