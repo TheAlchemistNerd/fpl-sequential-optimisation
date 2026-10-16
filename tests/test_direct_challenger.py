@@ -103,7 +103,14 @@ def test_supplementary_comparison_keeps_completed_source_run_unchanged(tmp_path)
     )
     predictions_path = source_dir / "predictions.csv"
     metadata_path = source_dir / "run_metadata.json"
+    diagnostics_path = source_dir / "fit_diagnostics.csv"
     base_predictions.to_csv(predictions_path, index=False)
+    pd.DataFrame(
+        [
+            {"gameweek": 3, "model": model, "diagnostic_gate_passed": True}
+            for model in ("hdp_gmm", "hdp_hmm")
+        ]
+    ).to_csv(diagnostics_path, index=False)
     metadata_path.write_text(
         json.dumps(
             {
@@ -114,6 +121,7 @@ def test_supplementary_comparison_keeps_completed_source_run_unchanged(tmp_path)
                 "seed": 17,
                 "first_gameweek": 3,
                 "last_gameweek": 3,
+                "last_forecast_gameweek_written": 3,
                 "feature_lookback_gameweeks": 5,
                 "max_stale_gameweeks": 5,
             }
@@ -141,3 +149,106 @@ def test_supplementary_comparison_keeps_completed_source_run_unchanged(tmp_path)
     assert (tmp_path / "comparison" / "predictions_with_direct.csv").is_file()
     assert predictions_path.read_bytes() == original_predictions
     assert metadata_path.read_bytes() == original_metadata
+
+
+def test_running_source_can_be_compared_only_through_a_diagnostic_passed_prefix(tmp_path):
+    import json
+    import pytest
+
+    from src.backtesting.engine import sha256_file
+    from src.research.direct_challenger import add_direct_ridge_comparison
+    from src.research.walk_forward import build_fold_panels
+
+    history = _small_history(weeks=5)
+    data_path = tmp_path / "source.csv"
+    data_path.write_text("fixed archive fingerprint", encoding="utf-8")
+    source_dir = tmp_path / "active_study"
+    source_dir.mkdir()
+    fold = build_fold_panels(
+        history,
+        3,
+        max_stale_gameweeks=int(history["gameweek"].max()) + 1,
+    )
+    target = fold.target.sort_values("player_id", kind="stable").reset_index(drop=True)
+    base_predictions = pd.DataFrame(
+        {
+            "season": "test",
+            "seed": 17,
+            "gameweek": 3,
+            "feature_cutoff_gameweek": 2,
+            "player_id": target["player_id"].astype(int),
+            "position": target["position"],
+            "price": target["price"],
+            "candidate_fresh": True,
+            "rolling_form": target["form_points"],
+            "hdp_gmm": target["form_points"] + 0.5,
+            "hdp_hmm": target["form_points"] - 0.5,
+        }
+    )
+    predictions_path = source_dir / "predictions.csv"
+    metadata_path = source_dir / "run_metadata.json"
+    diagnostics_path = source_dir / "fit_diagnostics.csv"
+    base_predictions.to_csv(predictions_path, index=False)
+    pd.DataFrame(
+        [
+            {"gameweek": 3, "model": model, "diagnostic_gate_passed": True}
+            for model in ("hdp_gmm", "hdp_hmm")
+        ]
+        + [{"gameweek": 4, "model": "hdp_gmm", "diagnostic_gate_passed": True}]
+    ).to_csv(diagnostics_path, index=False)
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "status": "running",
+                "source_sha256": sha256_file(data_path),
+                "source_coverage": {"normalized_player_gameweek_rows": len(history)},
+                "season": "test",
+                "seed": 17,
+                "first_gameweek": 3,
+                "last_gameweek": 5,
+                "last_forecast_gameweek_written": 3,
+                "feature_lookback_gameweeks": 5,
+                "max_stale_gameweeks": 5,
+            }
+        ),
+        encoding="utf-8",
+    )
+    original_predictions = predictions_path.read_bytes()
+    original_metadata = metadata_path.read_bytes()
+
+    result = add_direct_ridge_comparison(
+        history,
+        data_path=data_path,
+        source_output_dir=source_dir,
+        output_dir=tmp_path / "prefix_comparison",
+        alpha=1.0,
+        through_gameweek=3,
+    )
+    comparison_metadata = json.loads(
+        (tmp_path / "prefix_comparison" / "run_metadata.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert comparison_metadata["status"] == "partial_complete"
+    assert comparison_metadata["source_study_status"] == "running"
+    assert comparison_metadata["last_gameweek"] == 3
+    assert comparison_metadata["requested_last_gameweek"] == 5
+    assert comparison_metadata["diagnostic_gates_verified_for_selected_prefix"] is True
+    assert set(result["prediction_metrics"]["model"]) == {
+        "rolling_form", "direct_ridge", "hdp_gmm", "hdp_hmm"
+    }
+    assert set(result["squad_summary"]["strategy"]) == {
+        "form_milp", "direct_ridge_milp", "hdp_gmm_milp", "hdp_hmm_milp"
+    }
+    assert predictions_path.read_bytes() == original_predictions
+    assert metadata_path.read_bytes() == original_metadata
+
+    with pytest.raises(ValueError, match="last durable forecast"):
+        add_direct_ridge_comparison(
+            history,
+            data_path=data_path,
+            source_output_dir=source_dir,
+            output_dir=tmp_path / "out_of_prefix",
+            through_gameweek=4,
+        )

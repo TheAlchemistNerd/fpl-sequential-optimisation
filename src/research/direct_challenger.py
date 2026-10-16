@@ -157,12 +157,14 @@ def add_direct_ridge_comparison(
     source_output_dir: str | Path,
     output_dir: str | Path,
     alpha: float = 1.0,
+    through_gameweek: int | None = None,
 ) -> dict[str, pd.DataFrame]:
-    """Create an isolated four-predictor comparison from a completed HDP run.
+    """Create an isolated four-predictor comparison from a saved HDP prefix.
 
-    The source run is read-only. Direct forecasts and their evaluation outputs
-    are written under a separate directory so an active or completed HDP
-    forecast ledger keeps its original schema and provenance.
+    The source run is read-only. A running source is accepted only when an
+    explicit through_gameweek is within its durable forecast prefix. Direct
+    forecasts and evaluation outputs are written separately, so an active or
+    completed HDP ledger keeps its schema and provenance.
     """
     source_output_dir = Path(source_output_dir)
     output_dir = Path(output_dir)
@@ -173,16 +175,38 @@ def add_direct_ridge_comparison(
 
     metadata_path = source_output_dir / "run_metadata.json"
     predictions_path = source_output_dir / "predictions.csv"
-    if not metadata_path.is_file() or not predictions_path.is_file():
-        raise FileNotFoundError("Completed source run metadata and predictions are required")
-    source_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    if source_metadata.get("status") != "complete":
-        raise ValueError("The source HDP study must be complete before augmentation")
+    diagnostics_path = source_output_dir / "fit_diagnostics.csv"
+    if not all(path.is_file() for path in (metadata_path, predictions_path, diagnostics_path)):
+        raise FileNotFoundError(
+            "Source run metadata, predictions, and fit diagnostics are required"
+        )
+
+    # The full-season runner may append to its ledgers while a prefix
+    # comparison is being prepared. Read a consistent snapshot or ask the
+    # caller to retry after the next durable checkpoint.
+    metadata_bytes = metadata_path.read_bytes()
+    prediction_hash_before = sha256_file(predictions_path)
+    diagnostic_hash_before = sha256_file(diagnostics_path)
+    base = pd.read_csv(predictions_path)
+    diagnostics = pd.read_csv(diagnostics_path)
+    prediction_hash_after = sha256_file(predictions_path)
+    diagnostic_hash_after = sha256_file(diagnostics_path)
+    if (
+        metadata_bytes != metadata_path.read_bytes()
+        or prediction_hash_before != prediction_hash_after
+        or diagnostic_hash_before != diagnostic_hash_after
+    ):
+        raise RuntimeError(
+            "The source study advanced while its snapshot was being read; retry the comparison"
+        )
+    source_metadata = json.loads(metadata_bytes)
+    source_status = str(source_metadata.get("status", ""))
+    if source_status not in {"running", "forecasts_complete", "complete"}:
+        raise ValueError(f"Source HDP study is not in a usable state: {source_status!r}")
     actual_hash = sha256_file(data_path)
     if actual_hash != source_metadata.get("source_sha256"):
         raise ValueError("The supplied archive checksum differs from the completed HDP study")
 
-    base = pd.read_csv(predictions_path)
     required_columns = {
         *LEDGER_KEYS,
         "position",
@@ -195,11 +219,29 @@ def add_direct_ridge_comparison(
     if base.duplicated(["season", "seed", "gameweek", "player_id"]).any():
         raise ValueError("Source forecast ledger contains duplicate player-week rows")
     first_gameweek = int(source_metadata["first_gameweek"])
-    last_gameweek = int(source_metadata["last_gameweek"])
-    expected_weeks = list(range(first_gameweek, last_gameweek + 1))
+    requested_last_gameweek = int(source_metadata["last_gameweek"])
+    last_written = int(
+        source_metadata.get("last_forecast_gameweek_written", requested_last_gameweek)
+    )
+    if through_gameweek is None:
+        if source_status != "complete":
+            raise ValueError(
+                "A running source requires an explicit through_gameweek within its saved prefix"
+            )
+        effective_last_gameweek = requested_last_gameweek
+    else:
+        effective_last_gameweek = int(through_gameweek)
+        if not first_gameweek <= effective_last_gameweek <= requested_last_gameweek:
+            raise ValueError("through_gameweek must be within the source study's requested range")
+        if effective_last_gameweek > last_written:
+            raise ValueError(
+                "through_gameweek exceeds the source study's last durable forecast gameweek"
+            )
+    expected_weeks = list(range(first_gameweek, effective_last_gameweek + 1))
+    base = base.loc[base["gameweek"].astype(int) <= effective_last_gameweek].copy()
     saved_weeks = sorted(base["gameweek"].astype(int).unique().tolist())
     if saved_weeks != expected_weeks:
-        raise ValueError("Source forecast ledger does not cover the complete requested range")
+        raise ValueError("Source forecast ledger does not cover the selected contiguous prefix")
     if not (
         base["feature_cutoff_gameweek"].astype(int)
         == base["gameweek"].astype(int) - 1
@@ -209,6 +251,25 @@ def add_direct_ridge_comparison(
         raise ValueError("Source ledger already contains direct_ridge predictions")
     if not np.isfinite(base.loc[:, list(PREDICTION_COLUMNS)].to_numpy(dtype=float)).all():
         raise ValueError("Source forecast ledger contains non-finite predictions")
+
+    diagnostic_prefix = diagnostics.loc[
+        diagnostics["gameweek"].astype(int).between(first_gameweek, effective_last_gameweek)
+    ].copy()
+    expected_diagnostics = {
+        (gameweek, model)
+        for gameweek in expected_weeks
+        for model in ("hdp_gmm", "hdp_hmm")
+    }
+    diagnostic_keys = list(
+        zip(diagnostic_prefix["gameweek"].astype(int), diagnostic_prefix["model"].astype(str))
+    )
+    if len(diagnostic_keys) != len(set(diagnostic_keys)) or set(diagnostic_keys) != expected_diagnostics:
+        raise ValueError("Source diagnostics do not cover exactly two model fits per selected week")
+    gate_passed = diagnostic_prefix["diagnostic_gate_passed"].map(
+        lambda value: str(value).strip().lower() in {"true", "1"}
+    )
+    if not gate_passed.all():
+        raise ValueError("The selected source prefix contains a failed sampler diagnostic gate")
 
     if output_dir.exists() and (
         not output_dir.is_dir() or any(output_dir.iterdir())
@@ -261,8 +322,11 @@ def add_direct_ridge_comparison(
         prediction_columns=DIRECT_PREDICTION_COLUMNS,
     )
     position_metrics = pd.read_csv(output_dir / "prediction_position_metrics.csv")
+    replay_history = gameweeks.loc[
+        gameweeks["gameweek"].astype(int) <= effective_last_gameweek
+    ].copy()
     replay = run_backtest(
-        gameweeks,
+        replay_history,
         strategies=COMPARISON_STRATEGIES,
         seeds=(seed,),
         season=season,
@@ -282,17 +346,26 @@ def add_direct_ridge_comparison(
         .to_dict()
     )
 
+    is_full_range = effective_last_gameweek == requested_last_gameweek
     comparison_metadata = {
-        "status": "complete",
+        "status": "complete" if is_full_range else "partial_complete",
+        "comparison_scope": (
+            "full requested forecast range" if is_full_range else "durable source prefix only"
+        ),
         "comparison_type": "supplemental direct-points challenger",
         "source_study_directory": str(source_output_dir.resolve()),
-        "source_study_status": source_metadata["status"],
+        "source_study_status": source_status,
+        "source_study_last_forecast_gameweek_written": last_written,
         "source_sha256": actual_hash,
+        "source_prediction_snapshot_sha256": prediction_hash_before,
+        "source_diagnostic_snapshot_sha256": diagnostic_hash_before,
         "source_coverage": source_metadata["source_coverage"],
         "season": season,
         "seed": seed,
         "first_gameweek": first_gameweek,
-        "last_gameweek": last_gameweek,
+        "last_gameweek": effective_last_gameweek,
+        "requested_last_gameweek": requested_last_gameweek,
+        "diagnostic_gates_verified_for_selected_prefix": True,
         "feature_cutoff_rule": "strictly before each target gameweek",
         "forecast_persisted_before_target_outcomes_are_scored": True,
         "direct_model": "sklearn.linear_model.Ridge",
@@ -318,6 +391,11 @@ def add_direct_ridge_comparison(
             "Raw FPL points are signed integers; Ridge predicts their conditional mean and is not a probabilistic count model.",
             "The HDP challengers remain fitted to the fixed GW1-stratified cohort; direct Ridge uses all earlier player-week rows.",
             "One archived season and one seed do not establish cross-season generalization or policy superiority.",
+            *(
+                ["This output covers only a durable prefix of the requested source study and is not a full-season comparison."]
+                if not is_full_range
+                else []
+            ),
         ],
     }
     _write_json_atomic(comparison_metadata, output_dir / "run_metadata.json")
@@ -334,13 +412,22 @@ def add_direct_ridge_comparison(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data", required=True, help="Same Vaastav archive used by the completed HDP run")
-    parser.add_argument("--source-output", required=True, help="Completed three-model walk-forward output directory")
+    parser.add_argument("--data", required=True, help="Vaastav archive whose checksum is recorded by the source run")
+    parser.add_argument("--source-output", required=True, help="Three-model walk-forward output directory")
     parser.add_argument("--output", help="Separate comparison output directory")
     parser.add_argument("--alpha", type=float, default=1.0, help="Fixed Ridge regularization strength")
+    parser.add_argument(
+        "--through-gameweek",
+        type=int,
+        help="Explicitly compare a saved source prefix through this gameweek",
+    )
     args = parser.parse_args()
     source_output = Path(args.source_output)
-    output = Path(args.output) if args.output else source_output / "comparison_with_direct"
+    output = Path(args.output) if args.output else (
+        source_output / f"comparison_prefix_gw7_gw{args.through_gameweek}"
+        if args.through_gameweek is not None
+        else source_output / "comparison_with_direct"
+    )
     gameweeks = load_vaastav_merged(args.data)
     results = add_direct_ridge_comparison(
         gameweeks,
@@ -348,6 +435,7 @@ def main() -> None:
         source_output_dir=source_output,
         output_dir=output,
         alpha=args.alpha,
+        through_gameweek=args.through_gameweek,
     )
     print("Player-point prediction metrics:")
     print(results["prediction_metrics"].to_string(index=False))
