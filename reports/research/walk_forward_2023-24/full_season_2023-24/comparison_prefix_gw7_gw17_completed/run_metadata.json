@@ -1,0 +1,208 @@
+{
+  "status": "partial_complete",
+  "comparison_scope": "durable source prefix only",
+  "comparison_type": "supplemental direct-points challenger",
+  "source_study_directory": "C:\\Users\\Philtechber&Ent\\Downloads\\fpl-sequential-optimisation\\reports\\research\\walk_forward_2023-24\\full_season_2023-24",
+  "source_study_status": "running",
+  "source_study_last_forecast_gameweek_written": 17,
+  "source_sha256": "e9c09c8856f1c86b4f920f46ddd5033af83409439dfda53be925df2a3e7c8a9e",
+  "source_prediction_snapshot_sha256": "986b81629cb957d34d5c99b2d51719cd7b10e64cb1dc1171f05638103a129906",
+  "source_diagnostic_snapshot_sha256": "4a22a55e23dd71f0c2d3c86f6ba3a7a026f668d3aa88d49a53b6aec0ba45e7bb",
+  "source_coverage": {
+    "normalized_player_gameweek_rows": 28742,
+    "unique_players": 865,
+    "first_gameweek": 1,
+    "last_gameweek": 38
+  },
+  "season": "2023-24",
+  "seed": 42,
+  "first_gameweek": 7,
+  "last_gameweek": 17,
+  "requested_last_gameweek": 38,
+  "diagnostic_gates_verified_for_selected_prefix": true,
+  "feature_cutoff_rule": "strictly before each target gameweek",
+  "forecast_persisted_before_target_outcomes_are_scored": true,
+  "direct_model": "sklearn.linear_model.Ridge",
+  "direct_model_alpha": 1.0,
+  "direct_model_target": "realized player-gameweek FPL points, including negative values",
+  "direct_model_features": [
+    "form_points",
+    "form_std",
+    "xgi_points",
+    "appearance_probability",
+    "expected_minutes",
+    "pos_GK",
+    "pos_DEF",
+    "pos_MID",
+    "pos_FWD"
+  ],
+  "direct_model_scaling": "StandardScaler fitted on earlier training rows within each fold",
+  "direct_model_training_scope": "all earlier player-gameweek rows in the fold, not the HDP fit cohort",
+  "direct_model_training_rows_by_gameweek": {
+    "7": 3431,
+    "8": 4149,
+    "9": 4871,
+    "10": 5596,
+    "11": 6326,
+    "12": 7057,
+    "13": 7790,
+    "14": 8533,
+    "15": 9280,
+    "16": 10033,
+    "17": 10790
+  },
+  "prediction_columns": [
+    "rolling_form",
+    "hdp_gmm",
+    "hdp_hmm",
+    "direct_ridge"
+  ],
+  "replay_strategies": [
+    "form_milp",
+    "direct_ridge_milp",
+    "hdp_gmm_milp",
+    "hdp_hmm_milp"
+  ],
+  "direct_prediction_ledger": "direct_ridge_predictions.csv",
+  "combined_prediction_ledger": "predictions_with_direct.csv",
+  "prediction_metrics": [
+    {
+      "model": "direct_ridge",
+      "n": 8117,
+      "mae": 1.0554018640856329,
+      "rmse": 2.0074614821901515,
+      "mean_error": 0.003891507850935251,
+      "spearman": 0.6489990639800794
+    },
+    {
+      "model": "hdp_gmm",
+      "n": 8117,
+      "mae": 1.6386489607333858,
+      "rmse": 2.3535239327941238,
+      "mean_error": 0.4757949087488885,
+      "spearman": 0.2578122364128255
+    },
+    {
+      "model": "hdp_hmm",
+      "n": 8117,
+      "mae": 1.7029196383743053,
+      "rmse": 2.40951875330682,
+      "mean_error": 0.5810482191441704,
+      "spearman": 0.2570047691130987
+    },
+    {
+      "model": "rolling_form",
+      "n": 8117,
+      "mae": 1.0438585684366146,
+      "rmse": 2.104421599888646,
+      "mean_error": 0.003921810192599898,
+      "spearman": 0.6719240694030516
+    }
+  ],
+  "squad_metrics": [
+    {
+      "season": "2023-24",
+      "seed": 42,
+      "strategy": "form_milp",
+      "total_net_points": 643.0,
+      "total_gross_points": 679.0,
+      "total_transfer_hits": 36,
+      "total_transfers": 21,
+      "mean_weekly_points": 37.8235294117647,
+      "gameweeks": 17,
+      "evaluation_net_points": 540.0,
+      "evaluation_gross_points": 576.0,
+      "evaluation_transfer_hits": 36,
+      "evaluation_transfers": 21,
+      "evaluation_gameweeks": 11
+    },
+    {
+      "season": "2023-24",
+      "seed": 42,
+      "strategy": "direct_ridge_milp",
+      "total_net_points": 610.0,
+      "total_gross_points": 610.0,
+      "total_transfer_hits": 0,
+      "total_transfers": 12,
+      "mean_weekly_points": 35.88235294117647,
+      "gameweeks": 17,
+      "evaluation_net_points": 507.0,
+      "evaluation_gross_points": 507.0,
+      "evaluation_transfer_hits": 0,
+      "evaluation_transfers": 12,
+      "evaluation_gameweeks": 11
+    },
+    {
+      "season": "2023-24",
+      "seed": 42,
+      "strategy": "hdp_gmm_milp",
+      "total_net_points": 395.0,
+      "total_gross_points": 395.0,
+      "total_transfer_hits": 0,
+      "total_transfers": 12,
+      "mean_weekly_points": 23.235294117647058,
+      "gameweeks": 17,
+      "evaluation_net_points": 292.0,
+      "evaluation_gross_points": 292.0,
+      "evaluation_transfer_hits": 0,
+      "evaluation_transfers": 12,
+      "evaluation_gameweeks": 11
+    },
+    {
+      "season": "2023-24",
+      "seed": 42,
+      "strategy": "hdp_hmm_milp",
+      "total_net_points": 360.0,
+      "total_gross_points": 360.0,
+      "total_transfer_hits": 0,
+      "total_transfers": 12,
+      "mean_weekly_points": 21.176470588235293,
+      "gameweeks": 17,
+      "evaluation_net_points": 257.0,
+      "evaluation_gross_points": 257.0,
+      "evaluation_transfer_hits": 0,
+      "evaluation_transfers": 12,
+      "evaluation_gameweeks": 11
+    }
+  ],
+  "squad_metadata": {
+    "season": "2023-24",
+    "strategies": [
+      "form_milp",
+      "direct_ridge_milp",
+      "hdp_gmm_milp",
+      "hdp_hmm_milp"
+    ],
+    "seeds": [
+      42
+    ],
+    "first_gameweek": 1,
+    "last_gameweek": 17,
+    "lookback_gameweeks": 5,
+    "max_stale_gameweeks": 5,
+    "starting_budget_tenths": 1000,
+    "free_transfer_cap": 2,
+    "evaluation_start_gameweek": 7,
+    "dataset_sha256": "e9c09c8856f1c86b4f920f46ddd5033af83409439dfda53be925df2a3e7c8a9e",
+    "caveats": [
+      "Vaastav merged data does not contain official deadline availability snapshots.",
+      "The latest pre-GW row proxies each player market price and candidate eligibility.",
+      "Purchase prices and bank are simulated; historical manager ownership is not replayed.",
+      "The xGI challenger is a simple expected-points proxy, not a trained points model.",
+      "The Thompson challenger uses the repository's heuristic NB sampling, not thesis HDP/MCMC."
+    ]
+  },
+  "visualizations": [
+    "figures\\prediction_error_by_gameweek.png",
+    "figures\\prediction_rank_correlation_by_gameweek.png",
+    "figures\\prediction_mae_by_position.png",
+    "figures\\cumulative_squad_points.png"
+  ],
+  "caveats": [
+    "This direct Ridge model is a supervised points challenger, not a points emission inside the HDP likelihood.",
+    "Raw FPL points are signed integers; Ridge predicts their conditional mean and is not a probabilistic count model.",
+    "The HDP challengers remain fitted to the fixed GW1-stratified cohort; direct Ridge uses all earlier player-week rows.",
+    "One archived season and one seed do not establish cross-season generalization or policy superiority.",
+    "This output covers only a durable prefix of the requested source study and is not a full-season comparison."
+  ]
+}
