@@ -1,5 +1,5 @@
 {
-  "status": "running",
+  "status": "sampling_diagnostics_failed",
   "season": "2023-24",
   "source_file_name": "fpl_2023_24_merged_gw.csv",
   "source_url": "https://github.com/vaastav/Fantasy-Premier-League/blob/master/data/2023-24/gws/merged_gw.csv",
@@ -93,5 +93,21 @@
       "previous_status": "running",
       "previous_last_gameweek": 11
     }
-  ]
+  ],
+  "failure": {
+    "gameweek": 13,
+    "model": "hdp_hmm",
+    "reason": "NUTS divergence rate or mean acceptance probability failed the configured screening gate",
+    "diagnostic": {
+      "gameweek": 13,
+      "model": "hdp_hmm",
+      "training_rows": 264,
+      "fit_players": 24,
+      "active_states": 4,
+      "num_divergences": 6,
+      "divergence_rate": 0.12,
+      "mean_accept_prob": 0.9891883730888367,
+      "diagnostic_gate_passed": false
+    }
+  }
 }
