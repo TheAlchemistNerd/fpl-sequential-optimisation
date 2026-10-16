@@ -186,12 +186,10 @@ minus one. All 28 fit diagnostics for these fourteen forecast folds passed.
 | GW20 HDP-GMM | 432 | 24 | 4 | 0 / 50 | 0.9953 | Pass |
 | GW20 HDP-HMM | 432 | 24 | 2 | 0 / 50 | 0.9999 | Pass |
 
-The GW19 HMM diagnostic followed its GMM diagnostic by about 37 minutes. GW20
-HMM has now also passed, with 0/50 divergent draws and mean acceptance
-probability 0.9999; the GW20 forecast was written. The full-study metadata
-remains `running`, with GW21–GW38 and the full-range evaluation pending. These
-one-chain, 50-draw screens do not establish posterior convergence. The observed
-HMM runtimes are checkpoints from this machine, not full-run estimates.
+The GW19 HMM fit followed its GMM fit by about 37 minutes; GW20 HMM also
+required an extended CPU fit. These are machine-specific runtime checkpoints,
+not full-run estimates. One chain and 50 retained draws provide diagnostic
+screening, not evidence of posterior convergence.
 
 ## Four-way prediction and squad comparison: GW7–GW19
 
