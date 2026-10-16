@@ -169,7 +169,7 @@ four-model evaluation.
 
 ## Current run checkpoint
 
-At 2026-10-16 17:49 Africa/Nairobi, the local sampler process (PID 8932) was
+At 2026-10-16 18:04 Africa/Nairobi, the local sampler process (PID 8932) was
 still active and metadata reported `status: running` through GW19. The durable
 forecast ledger contains 9,651 forecasts across GW7–GW19, with unique
 player-week keys, and finite predictions. Every row records
@@ -189,7 +189,9 @@ written before both model diagnostics pass.
 The GW19 HMM diagnostic was written about 37 minutes after its GMM diagnostic.
 These are screening results from one chain with 50 retained draws, not evidence
 of posterior convergence. GW20 HMM, GW21–GW38, and the full-range four-predictor
-evaluation remain pending. The observed fold duration is not a full-run ETA.
+evaluation remain pending. At the 18:04 checkpoint, the GW20 HMM had sampled
+for more than 15 minutes after the GW20 GMM diagnostic without writing a result;
+this is a partial runtime observation, not a full-fold or full-run ETA.
 
 ## Prediction-only four-way comparison checkpoint: GW7–GW19
 
