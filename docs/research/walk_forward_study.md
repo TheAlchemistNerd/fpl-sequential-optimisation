@@ -157,22 +157,24 @@ four-model evaluation.
 
 ## Current run checkpoint
 
-At 2026-10-16 16:24 Africa/Nairobi, the local sampler process (PID 8932) was
-still active and metadata reported `status: running` through GW18. The ledger
-contains 8,882 forecasts across GW7–GW18, with unique player-week keys, finite
-predictions, and `feature_cutoff_gameweek = gameweek - 1` in every row. All 24
-diagnostic rows for these twelve completed folds passed.
+At 2026-10-16 16:59 Africa/Nairobi, the local sampler process (PID 8932) was
+still active and metadata reported `status: running`. The durable forecast
+ledger contains 8,882 forecasts through GW18, with unique player-week keys,
+finite predictions, and `feature_cutoff_gameweek = gameweek - 1` in every row.
+All 24 fit diagnostics for these twelve forecast folds passed. A 25th
+diagnostic row records a passing GW19 GMM fit; the GW19 HMM diagnostic is
+pending, so the runner has not yet written GW19 forecasts.
 
-| GW18 model | Training rows | Fit players | Active states | Divergences | Mean acceptance | Screen |
+| Fold / model | Training rows | Fit players | Active states | Divergences | Mean acceptance | Screen |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| HDP-GMM | 384 | 24 | 3 | 0 / 50 | 0.9998 | Pass |
-| HDP-HMM | 384 | 24 | 4 | 0 / 50 | 1.0000 | Pass |
+| GW18 HDP-GMM | 384 | 24 | 3 | 0 / 50 | 0.9998 | Pass |
+| GW18 HDP-HMM | 384 | 24 | 4 | 0 / 50 | 1.0000 | Pass |
+| GW19 HDP-GMM | 408 | 24 | 2 | 0 / 50 | 0.9873 | Pass; HMM pending |
 
-The HMM diagnostic was written about 39 minutes after the GMM diagnostic. These
-are screening results from one chain with 50 retained draws, not evidence of
-posterior convergence. At the checkpoint, GW19 had not yet written a diagnostic;
-GW19–GW38 and the full-range four-predictor evaluation remain pending. The
-observed fold duration is not a full-run ETA.
+The GW18 HMM diagnostic was written about 39 minutes after its GMM diagnostic.
+These are screening results from one chain with 50 retained draws, not evidence
+of posterior convergence. GW19–GW38 and the full-range four-predictor
+evaluation remain pending. The observed fold duration is not a full-run ETA.
 
 ## Interim four-predictor comparison: GW7–GW17
 
