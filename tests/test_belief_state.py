@@ -269,6 +269,12 @@ class TestFeatureToPointsMapper:
 class TestNBPointsPosterior:
     """Validate Negative-Binomial points posterior."""
 
+    def test_rejects_negative_mean_for_signed_target(self):
+        from src.models.belief_state import NBPointsPosterior
+
+        with pytest.raises(ValueError, match="signed FPL points"):
+            NBPointsPosterior(player_id=1, r=5.0, expected_points=-1.0)
+
     def test_p_computation(self):
         from src.models.belief_state import NBPointsPosterior
         nb = NBPointsPosterior(player_id=1, r=5.0, expected_points=10.0)
@@ -307,6 +313,12 @@ class TestNBPointsPosterior:
         data = np.array([5, 5, 5, 5, 5])
         r = fit_nb_dispersion(data)
         assert r == 100.0  # Fallback to Poisson
+
+    def test_fit_nb_dispersion_rejects_negative_scores(self):
+        from src.models.belief_state import fit_nb_dispersion
+
+        with pytest.raises(ValueError, match="raw signed FPL totals"):
+            fit_nb_dispersion(np.array([3, 0, -1, 8]))
 
 
 # ===========================================================================

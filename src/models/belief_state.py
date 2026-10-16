@@ -301,7 +301,11 @@ class FeatureToPointsMapper:
 @dataclass
 class NBPointsPosterior:
     """
-    Negative-Binomial posterior over FPL points for a single player.
+    Negative-Binomial posterior over a non-negative point-count proxy.
+
+    This distribution cannot represent negative outcomes or a negative mean.
+    It is not a predictive distribution for unmodified raw FPL totals when
+    those totals can be negative.
 
     Parameterised by (r, p) such that:
         E[Y] = r(1-p)/p
@@ -314,6 +318,15 @@ class NBPointsPosterior:
     player_id: int
     r: float  # dispersion (learned from historical data)
     expected_points: float  # μ
+
+    def __post_init__(self) -> None:
+        if not np.isfinite(self.r) or self.r <= 0:
+            raise ValueError("Negative-Binomial dispersion r must be finite and positive.")
+        if not np.isfinite(self.expected_points) or self.expected_points < 0:
+            raise ValueError(
+                "Negative-Binomial expected_points must be finite and non-negative; "
+                "use a signed-support model for raw signed FPL points."
+            )
 
     @property
     def p(self) -> float:
@@ -352,8 +365,21 @@ def fit_nb_dispersion(
 
     where μ is the sample mean and σ² is the sample variance.
     """
-    mu = historical_points.mean()
-    var = historical_points.var()
+    values = np.asarray(historical_points, dtype=np.float64)
+    if values.ndim != 1 or values.size == 0:
+        raise ValueError("historical_points must be a non-empty one-dimensional array.")
+    if (
+        not np.isfinite(values).all()
+        or np.any(values < 0)
+        or np.any(values != np.floor(values))
+    ):
+        raise ValueError(
+            "Negative-Binomial dispersion requires finite, non-negative integer "
+            "outcomes; raw signed FPL totals are unsupported."
+        )
+
+    mu = values.mean()
+    var = values.var()
 
     if var <= mu:
         # Under-dispersed — fall back to Poisson (large r)

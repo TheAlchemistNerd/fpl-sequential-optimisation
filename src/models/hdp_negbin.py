@@ -1,11 +1,10 @@
-"""HDP-Negative-Binomial model for total FPL points.
+"""HDP-Negative-Binomial model for non-negative integer outcomes.
 
-Models total FPL points per gameweek using a Negative Binomial
-likelihood.  This is **Variant C** documented in ``methodology.md`` §3.2.
-
-The Negative Binomial is preferred over the Poisson because FPL points
-are over-dispersed (variance > mean) — a single blank or a 15-point
-haul doesn't derail the model.
+This is **Variant C** documented in ``methodology.md`` §3.2. The likelihood
+has support only on non-negative integers. It therefore cannot model raw FPL
+``total_points`` when the target includes negative scores. Use a signed-target
+regressor for a direct point-mean challenger, or specify a different
+signed-support likelihood before treating points as an HDP outcome emission.
 
 The base measure factorises as:
     p  ~ Beta(a_0, b_0)    # success probability
@@ -51,7 +50,8 @@ def hdp_negbin_model(
     Parameters
     ----------
     points : jnp.ndarray (N,)
-        Total FPL points for each player-gameweek observation.
+        Non-negative integer outcome for each player-gameweek observation.
+        This low-level NumPyro model assumes the support has been validated.
     player_ids : jnp.ndarray (N,)
         Integer player identifier.
     num_players : int
@@ -96,6 +96,44 @@ def hdp_negbin_model(
         )
 
 
+def _validate_nb_inputs(
+    points: np.ndarray,
+    player_ids: np.ndarray,
+    num_players: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Validate count support and player-index alignment before JAX tracing."""
+    try:
+        values = np.asarray(points, dtype=np.float64)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("points must be finite, non-negative integer values.") from exc
+    if values.ndim != 1 or values.size == 0:
+        raise ValueError("points must be a non-empty one-dimensional array.")
+    if (
+        not np.isfinite(values).all()
+        or np.any(values < 0)
+        or np.any(values != np.floor(values))
+    ):
+        raise ValueError(
+            "points must be finite, non-negative integers; a Negative Binomial "
+            "cannot represent signed raw FPL total_points."
+        )
+
+    try:
+        ids = np.asarray(player_ids, dtype=np.float64)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("player_ids must contain integer indices.") from exc
+    if ids.ndim != 1 or ids.size != values.size:
+        raise ValueError("player_ids must be one-dimensional and match points length.")
+    if not np.isfinite(ids).all() or np.any(ids != np.floor(ids)):
+        raise ValueError("player_ids must contain finite integer indices.")
+    if not isinstance(num_players, (int, np.integer)) or num_players <= 0:
+        raise ValueError("num_players must be a positive integer.")
+    if np.any(ids < 0) or np.any(ids >= num_players):
+        raise ValueError("player_ids must fall within [0, num_players).")
+
+    return values.astype(np.float32), ids.astype(np.int32)
+
+
 def run_hdp_negbin(
     points: np.ndarray,
     player_ids: np.ndarray,
@@ -112,7 +150,9 @@ def run_hdp_negbin(
     Parameters
     ----------
     points : np.ndarray (N,)
-        Total FPL points (non-negative integers).
+        Non-negative integer outcomes. Raw signed FPL ``total_points`` are not
+        valid inputs unless an explicitly documented non-negative transform is
+        applied before fitting.
     player_ids : np.ndarray (N,)
         Integer player IDs.
     num_players : int
@@ -125,8 +165,11 @@ def run_hdp_negbin(
     summary : dict
         Key statistics including per-cluster mean points and dispersion.
     """
-    jax_points = jnp.array(points, dtype=jnp.float32)
-    jax_pids = jnp.array(player_ids, dtype=jnp.int32)
+    validated_points, validated_player_ids = _validate_nb_inputs(
+        points, player_ids, num_players
+    )
+    jax_points = jnp.array(validated_points, dtype=jnp.float32)
+    jax_pids = jnp.array(validated_player_ids, dtype=jnp.int32)
 
     log.info(
         "Running HDP-Negative-Binomial: N=%d, players=%d",

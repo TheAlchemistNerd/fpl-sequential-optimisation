@@ -13,7 +13,7 @@ The initial challenger set is deliberately small:
 | `hold` | Keep the initial squad and reselect the XI and captain from lagged form. | Control for transfer activity. |
 | `form_milp` | Optimize the squad and XI from mean points in the prior five gameweeks. | Simple lagged prediction baseline. |
 | `xg_milp` | Optimize from a prior-five-gameweek xG and xA expected-points proxy, including appearance and clean-sheet components. | Feature-based challenger, not a fitted points model. |
-| `thompson_nb_milp` | Sample the existing heuristic negative-binomial point distribution, then optimize with the transfer MILP. | Repository implementation; it is not the thesis HDP/MCMC model. |
+| `thompson_nb_milp` | Sample the existing heuristic negative-binomial point distribution, then optimize with the transfer MILP. | Repository implementation; it is not the thesis HDP/MCMC model and only supports a non-negative mean/outcome. It cannot represent raw negative FPL scores. |
 | `random_valid` | Optimize seeded random player scores under the same squad, budget, transfer, and hit constraints. | Feasible stochastic reference, not a uniform draw over all legal squads. |
 
 The repository's current MCTS and DDQN modules are not included as historical challengers. Their current evaluation paths use simplified synthetic/static environments and do not replay FPL deadline information, legal weekly transfers, and actual season outcomes. They should be wired to this transition model before being compared.

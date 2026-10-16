@@ -184,6 +184,16 @@ fresh-candidate player-week rows, with `feature_cutoff_gameweek = gameweek - 1`.
 The direct model learns signed points from earlier feature-outcome pairs; GMM
 and HMM use smoothed state rewards estimated from earlier outcomes.
 
+The 2023–24 archive contains 165 negative scores among 29,725 rows with points;
+the minimum is −4. A standard Negative Binomial therefore cannot be the
+likelihood for unmodified raw FPL scores. The direct Ridge challenger uses the
+signed target. GMM and HMM retain Gaussian emissions for engineered features
+and map their filtered state probabilities to smoothed rewards from earlier
+scores; those rewards are not an outcome likelihood inside either HDP. A
+direct points-emission HDP remains future work until a likelihood with signed
+support is selected. Shifting or clipping the scores would change the target
+and would need its own explicit modeling decision.
+
 | Predictor | Rows | MAE | RMSE | Mean error | Spearman |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Rolling form | 8,117 | 1.0439 | 2.1044 | 0.0039 | 0.6719 |

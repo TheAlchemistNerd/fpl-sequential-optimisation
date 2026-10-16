@@ -106,6 +106,24 @@ def points_data():
 class TestHDPNegativeBinomial:
     """Validate HDP-Negative-Binomial model."""
 
+    def test_run_rejects_negative_points_before_sampling(self):
+        from src.models.hdp_negbin import run_hdp_negbin
+
+        with pytest.raises(ValueError, match="cannot represent signed raw FPL"):
+            run_hdp_negbin(
+                np.array([2, -1]), np.array([0, 0]), 1,
+                num_warmup=1, num_samples=1,
+            )
+
+    def test_run_rejects_noninteger_points_before_sampling(self):
+        from src.models.hdp_negbin import run_hdp_negbin
+
+        with pytest.raises(ValueError, match="non-negative integers"):
+            run_hdp_negbin(
+                np.array([2.5, 1.0]), np.array([0, 0]), 1,
+                num_warmup=1, num_samples=1,
+            )
+
     def test_model_uses_negbin_likelihood(self):
         from src.models import hdp_negbin
         source = Path(hdp_negbin.__file__).read_text()
