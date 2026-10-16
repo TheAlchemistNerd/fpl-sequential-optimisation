@@ -131,14 +131,14 @@ For the full comparison, run the direct-points pass after the three-model study
 reaches `status: complete`; it does not refit either HDP model:
 
 ~~~powershell
-.\venv\Scripts\python.exe -m src.research.direct_challenger --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --source-output reports/research/walk_forward_2023-24/full_season_2023-24 --output reports/research/walk_forward_2023-24/full_season_2023-24/comparison_with_direct --alpha 1.0
+.\venv\Scripts\python.exe -m src.research.direct_challenger --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --source-output reports/research/walk_forward_2023-24/full_season_2023-24 --output reports/research/walk_forward_2023-24/full_season_2023-24/comparison_full_range_gw7_gw38 --alpha 1.0
 ~~~
 
 The full-range command verifies that the source run is complete and that the
 archive checksum, fold coverage, player-week keys, and feature cutoffs match.
 It writes all direct forecasts before scoring outcomes, then produces the
 four-model prediction metrics, constrained replay, plots, and separate metadata
-under `comparison_with_direct/`. It does not change the original three-model
+under `comparison_full_range_gw7_gw38/`. It does not change the original three-model
 artifacts.
 
 While the full run is still sampling, a durable, diagnostics-passed prefix can
