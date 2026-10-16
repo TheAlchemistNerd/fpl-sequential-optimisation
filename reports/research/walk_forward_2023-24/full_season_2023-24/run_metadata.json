@@ -87,5 +87,11 @@
     "State-conditioned points are estimated from earlier realized player-gameweek outcomes, not from a direct points-emission model.",
     "One archived season is a pilot and cannot establish cross-season generalization."
   ],
-  "last_forecast_gameweek_written": 11
+  "last_forecast_gameweek_written": 11,
+  "resume_history": [
+    {
+      "previous_status": "running",
+      "previous_last_gameweek": 11
+    }
+  ]
 }
