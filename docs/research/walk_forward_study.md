@@ -164,14 +164,11 @@ run the full-range command above after the core source ledger is complete.
 
 ## Current run checkpoint
 
-At 2026-10-17 00:59 Africa/Nairobi, the local sampler was active and metadata
-reported `status: running` through GW24 of 38. The durable forecast ledger
-contains 13,590 rows across GW7–GW24, with unique player-week keys, finite
-predictions, and each feature cutoff equal to the target week minus one. All 36
-diagnostics for these eighteen persisted folds passed. GW25 GMM passed with 552
-training rows, 24 fit players, two active states, zero divergences, and mean
-acceptance 0.9930; the HMM diagnostic was still pending and no GW25 forecasts
-had been written at this checkpoint.
+At 2026-10-17 01:07 Africa/Nairobi, the local sampler was active and metadata
+reported `status: running` through GW25 of 38. The durable forecast ledger
+contains 14,404 rows across GW7–GW25, with unique player-week keys, finite
+predictions, and each feature cutoff equal to the target week minus one. All 38
+diagnostics for these nineteen persisted folds passed.
 
 | Fold / model | Training rows | Fit players | Active states | Divergences | Mean acceptance | Screen |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
@@ -189,6 +186,8 @@ had been written at this checkpoint.
 | GW23 HDP-HMM | 504 | 24 | 4 | 0 / 50 | 0.9985 | Pass |
 | GW24 HDP-GMM | 528 | 24 | 3 | 0 / 50 | 0.9996 | Pass |
 | GW24 HDP-HMM | 528 | 24 | 4 | 0 / 50 | 0.9859 | Pass |
+| GW25 HDP-GMM | 552 | 24 | 2 | 0 / 50 | 0.9930 | Pass |
+| GW25 HDP-HMM | 552 | 24 | 3 | 0 / 50 | 0.9939 | Pass |
 
 These are machine-specific runtime checkpoints, not full-run estimates. One
 chain and 50 retained draws provide diagnostic screening, not evidence of
