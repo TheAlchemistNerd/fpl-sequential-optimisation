@@ -276,7 +276,7 @@ The first GW13 HMM fit exceeded the divergence screen, so its forecasts were wit
 
 ## Compute placement and troubleshooting record
 
-The checked-out run used the repository's local Windows virtual environment at `C:\Users\Philtechber&Ent\Downloads\fpl-sequential-optimisation\venv`; it did not run on a remote ChatGPT worker. The full 2023–24 command was first attempted locally with 12 fit players per position, six latent states, two chains, and 50 warmup plus 50 retained draws. The first Bayesian fold took several CPU minutes and had not written a forecast row, so that attempt was stopped before any results were scored.
+The checked-out run used the repository's local Windows virtual environment at `C:\Users\Philtechber&Ent\Downloads\fpl-sequential-optimisation\venv`; it did not run on a remote ChatGPT worker. The active host reports an Intel Core i5-5300U (two cores, four logical processors) and Intel HD Graphics 5500. In the same virtual environment, JAX 0.8.0 reports the `cpu` backend and one `CpuDevice`; `nvidia-smi` is unavailable. This run therefore uses CPU inference, not CUDA acceleration. The full 2023–24 command was first attempted locally with 12 fit players per position, six latent states, two chains, and 50 warmup plus 50 retained draws. The first Bayesian fold took several CPU minutes and had not written a forecast row, so that attempt was stopped before any results were scored.
 
 A smaller GW7 diagnostic then used six fit players per position (24 total), four latent states, one chain, 25 warmup plus 25 retained draws, and NumPyro's default 0.8 target acceptance. It wrote a 718-player GW7 forecast ledger row set, then recorded these NUTS diagnostics:
 
