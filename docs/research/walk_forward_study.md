@@ -157,21 +157,22 @@ four-model evaluation.
 
 ## Current run checkpoint
 
-At 2026-10-16 16:09 Africa/Nairobi, the local sampler process (PID 8932) was
-still active. Core metadata remained `status: running` through GW17, with 8,117
-forecast rows across GW7–GW17. Both GW17 fits passed: GMM had 0/50 divergences
-and mean acceptance 0.9576; HMM had 0/50 divergences and mean acceptance
-0.9876. All 22 diagnostics for those completed folds passed. The durable ledger
-has unique player-week keys, finite predictions, and the expected cutoff in
-every row (`feature_cutoff_gameweek = gameweek - 1`).
+At 2026-10-16 16:24 Africa/Nairobi, the local sampler process (PID 8932) was
+still active and metadata reported `status: running` through GW18. The ledger
+contains 8,882 forecasts across GW7–GW18, with unique player-week keys, finite
+predictions, and `feature_cutoff_gameweek = gameweek - 1` in every row. All 24
+diagnostic rows for these twelve completed folds passed.
 
-The GW18 GMM diagnostic was written at 15:45:37: 0/50 divergences and mean
-acceptance 0.9998. At the 16:09 check, its HMM fit had sampled for about 24
-minutes without writing a diagnostic or failure. The diagnostics file therefore
-has one orphan GMM row for the unfinished fold, but no GW18 forecast rows have
-been appended; the runner writes a fold only after both models pass. The full
-GW18 forecast and later weeks, and the full-range four-predictor evaluation,
-remain pending. This local fold duration is not a full-run ETA.
+| GW18 model | Training rows | Fit players | Active states | Divergences | Mean acceptance | Screen |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| HDP-GMM | 384 | 24 | 3 | 0 / 50 | 0.9998 | Pass |
+| HDP-HMM | 384 | 24 | 4 | 0 / 50 | 1.0000 | Pass |
+
+The HMM diagnostic was written about 39 minutes after the GMM diagnostic. These
+are screening results from one chain with 50 retained draws, not evidence of
+posterior convergence. At the checkpoint, GW19 had not yet written a diagnostic;
+GW19–GW38 and the full-range four-predictor evaluation remain pending. The
+observed fold duration is not a full-run ETA.
 
 ## Interim four-predictor comparison: GW7–GW17
 
