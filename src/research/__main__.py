@@ -30,6 +30,11 @@ def main() -> None:
         help="Abort before forecasting when a model exceeds this retained-draw divergence rate",
     )
     parser.add_argument("--truncation", type=int, default=6)
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Continue from a contiguous saved forecast prefix that passed sampler diagnostics",
+    )
     args = parser.parse_args()
 
     gameweeks = load_vaastav_merged(args.data)
@@ -50,6 +55,7 @@ def main() -> None:
         target_accept_prob=args.target_accept,
         max_divergence_rate=args.max_divergence_rate,
         truncation=args.truncation,
+        resume=args.resume,
     )
     print("Player-point prediction metrics:")
     print(results["prediction_metrics"].to_string(index=False))

@@ -108,6 +108,10 @@ The command uses a resource-constrained exploratory setting: one chain, 25 warmu
 
 The run metadata records the input checksum, requested folds, cutoff and feature rules, selected fit cohort, model feature list, seed, truncation, MCMC settings, and JAX device count. Each target fold derives separate GMM and HMM random keys from the seed and gameweek. For exact reproduction, retain the input archive and the dependency versions used for the run.
 
+The longer locally measured configuration uses 200 warmup steps, 50 retained draws, one chain, target acceptance 0.99, four states, and six fit players per position. The full-season runner writes to `reports/research/walk_forward_2023-24/full_season_2023-24/`.
+
+An interrupted run can be continued by repeating its command with `--resume`, the same source file and model settings, and the same output directory. Resume validates the source hash and coverage, fit roster, feature and sampler settings, contiguous player-week ledger, and both models' passing diagnostics before appending the next fold. It refuses a failed, partial, mismatched, or diagnostic-free prefix; use a new output directory when changing the data or configuration.
+
 ## Compute placement and troubleshooting record
 
 The checked-out run used the repository's local Windows virtual environment at `C:\Users\Philtechber&Ent\Downloads\fpl-sequential-optimisation\venv`; it did not run on a remote ChatGPT worker. The full 2023–24 command was first attempted locally with 12 fit players per position, six latent states, two chains, and 50 warmup plus 50 retained draws. The first Bayesian fold took several CPU minutes and had not written a forecast row, so that attempt was stopped before any results were scored.

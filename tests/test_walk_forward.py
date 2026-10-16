@@ -234,6 +234,71 @@ def test_sampler_diagnostic_gate_stops_before_forecast_and_saves_failure(tmp_pat
     assert json.loads((tmp_path / "run_metadata.json").read_text())["status"] == "sampling_diagnostics_failed"
 
 
+def test_resume_continues_only_after_a_screened_contiguous_fold(monkeypatch, tmp_path):
+    from src.research import walk_forward
+
+    history = _small_history(weeks=8)
+    source = tmp_path / "historical.csv"
+    source.write_text("fixture source fingerprint", encoding="utf-8")
+    output = tmp_path / "study"
+    calls = {"gmm": 0, "hmm": 0}
+    summary = {"num_divergences": 0, "mean_accept_prob": 0.95, "active_clusters": 2}
+
+    def fit_gmm(*args, **kwargs):
+        calls["gmm"] += 1
+        return {}, summary
+
+    def fit_hmm(*args, **kwargs):
+        calls["hmm"] += 1
+        return {}, summary
+
+    monkeypatch.setattr(walk_forward, "run_hdp_gmm", fit_gmm)
+    monkeypatch.setattr(walk_forward, "run_hdp_hmm", fit_hmm)
+    monkeypatch.setattr(
+        walk_forward,
+        "predict_hdp_gmm",
+        lambda samples, train_x, train_codes, train_points, target_x, target_ids, player_map:
+            np.zeros(len(target_x)),
+    )
+    monkeypatch.setattr(
+        walk_forward,
+        "predict_hdp_hmm",
+        lambda samples, train, train_x, train_points, target_x, target_ids, **kwargs:
+            np.zeros(len(target_x)),
+    )
+    options = {
+        "output_dir": output,
+        "season": "test",
+        "source_path": source,
+        "first_gameweek": 7,
+        "players_per_position": 1,
+        "seed": 4,
+        "num_warmup": 2,
+        "num_samples": 2,
+        "num_chains": 1,
+        "target_accept_prob": 0.95,
+        "max_divergence_rate": 0.01,
+        "truncation": 2,
+    }
+
+    first, _, _ = walk_forward.generate_forecast_ledger(
+        history, last_gameweek=7, **options
+    )
+    assert set(first["gameweek"]) == {7}
+    assert calls == {"gmm": 1, "hmm": 1}
+
+    resumed, diagnostics, metadata = walk_forward.generate_forecast_ledger(
+        history, last_gameweek=8, resume=True, **options
+    )
+    assert set(resumed["gameweek"]) == {7, 8}
+    assert set(diagnostics["gameweek"]) == {7, 8}
+    assert calls == {"gmm": 2, "hmm": 2}
+    assert metadata["last_forecast_gameweek_written"] == 8
+    assert metadata["resume_history"] == [
+        {"previous_status": "forecasts_complete", "previous_last_gameweek": 7}
+    ]
+
+
 def test_plot_study_artifacts_regenerates_all_figures_from_saved_csvs(tmp_path):
     from src.research.plots import plot_study_artifacts
 

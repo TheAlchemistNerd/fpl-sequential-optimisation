@@ -477,6 +477,116 @@ def _require_sampler_diagnostics(
     )
 
 
+def _load_resume_state(
+    *,
+    ledger_path: Path,
+    diagnostics_path: Path,
+    metadata_path: Path,
+    expected_metadata: dict[str, Any],
+    header: list[str],
+) -> tuple[dict[str, Any], pd.DataFrame, list[dict[str, Any]], int]:
+    """Load a contiguous, screened forecast prefix for an explicit resume."""
+    required_paths = (ledger_path, diagnostics_path, metadata_path)
+    missing_paths = [str(path) for path in required_paths if not path.is_file()]
+    if missing_paths:
+        raise ValueError(f"Cannot resume; missing run artifacts: {missing_paths}")
+
+    previous_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    compared_keys = (
+        "season",
+        "source_file_name",
+        "source_url",
+        "source_sha256",
+        "source_coverage",
+        "first_gameweek",
+        "feature_lookback_gameweeks",
+        "max_stale_gameweeks",
+        "fit_roster_selected_from_gw1",
+        "players_per_position",
+        "seed",
+        "num_warmup",
+        "num_samples",
+        "num_chains",
+        "nuts_target_accept_prob",
+        "truncation",
+        "model_features",
+    )
+    for key in compared_keys:
+        if previous_metadata.get(key) != expected_metadata.get(key):
+            raise ValueError(
+                f"Cannot resume; saved configuration differs for {key}: "
+                f"{previous_metadata.get(key)!r} != {expected_metadata.get(key)!r}"
+            )
+    previous_gate = previous_metadata.get("max_divergence_rate")
+    if previous_gate is None:
+        previous_gate = previous_metadata.get("diagnostic_gate", {}).get(
+            "maximum_divergence_rate"
+        )
+    if previous_gate != expected_metadata.get("max_divergence_rate"):
+        raise ValueError("Cannot resume; saved maximum divergence rate differs")
+
+    previous_last = int(previous_metadata.get("last_forecast_gameweek_written", 0))
+    first_gameweek = int(expected_metadata["first_gameweek"])
+    requested_last = int(expected_metadata["last_gameweek"])
+    saved_last = int(previous_metadata.get("last_gameweek", previous_last))
+    if previous_last < first_gameweek or previous_last > requested_last:
+        raise ValueError("Cannot resume; saved forecast prefix is outside the requested range")
+    if saved_last > requested_last:
+        raise ValueError("Cannot resume; saved run extends beyond the requested last gameweek")
+
+    predictions = pd.read_csv(ledger_path)
+    if list(predictions.columns) != header:
+        raise ValueError("Cannot resume; forecast ledger columns do not match this runner")
+    expected_weeks = list(range(first_gameweek, previous_last + 1))
+    saved_weeks = sorted(predictions["gameweek"].astype(int).unique().tolist())
+    if saved_weeks != expected_weeks:
+        raise ValueError(
+            f"Cannot resume; forecast ledger is not a contiguous prefix: {saved_weeks}"
+        )
+    if predictions.duplicated(["gameweek", "player_id"]).any():
+        raise ValueError("Cannot resume; forecast ledger contains duplicate player-week rows")
+    if not (
+        predictions["feature_cutoff_gameweek"].astype(int)
+        == predictions["gameweek"].astype(int) - 1
+    ).all():
+        raise ValueError("Cannot resume; forecast ledger contains an invalid feature cutoff")
+    if not np.isfinite(predictions.loc[:, list(PREDICTION_COLUMNS)].to_numpy(dtype=float)).all():
+        raise ValueError("Cannot resume; forecast ledger contains non-finite predictions")
+
+    diagnostics = pd.read_csv(diagnostics_path)
+    expected_models = {"hdp_gmm", "hdp_hmm"}
+    expected_draws = int(expected_metadata["num_samples"]) * int(
+        expected_metadata["num_chains"]
+    )
+    for gameweek in expected_weeks:
+        fold = diagnostics.loc[diagnostics["gameweek"].astype(int) == gameweek]
+        if set(fold["model"].astype(str)) != expected_models or len(fold) != 2:
+            raise ValueError(
+                f"Cannot resume; GW{gameweek} lacks one diagnostic row per model"
+            )
+        for row in fold.to_dict(orient="records"):
+            divergence_rate = float(row.get("divergence_rate", row["num_divergences"] / expected_draws))
+            mean_accept_prob = float(row["mean_accept_prob"])
+            gate_passed = bool(row.get("diagnostic_gate_passed", False))
+            if (
+                not gate_passed
+                or divergence_rate > float(expected_metadata["max_divergence_rate"])
+                or mean_accept_prob < 0.5
+            ):
+                raise ValueError(
+                    f"Cannot resume; GW{gameweek} {row['model']} did not pass the saved diagnostic gate"
+                )
+    if set(diagnostics["gameweek"].astype(int)) != set(expected_weeks):
+        raise ValueError("Cannot resume; diagnostic rows include an incomplete or failed fold")
+
+    return (
+        previous_metadata,
+        predictions,
+        diagnostics.to_dict(orient="records"),
+        previous_last,
+    )
+
+
 def generate_forecast_ledger(
     gameweeks: pd.DataFrame,
     *,
@@ -495,6 +605,7 @@ def generate_forecast_ledger(
     target_accept_prob: float = 0.95,
     max_divergence_rate: float = 0.01,
     truncation: int = 6,
+    resume: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     """Fit sequential folds and durably write each forecast before scoring.
 
@@ -571,19 +682,50 @@ def generate_forecast_ledger(
             "One archived season is a pilot and cannot establish cross-season generalization.",
         ],
     }
-    _write_metadata(metadata_path, metadata)
     header = [
         "season", "seed", "gameweek", "feature_cutoff_gameweek", "player_id",
         "position", "price", "candidate_fresh", *PREDICTION_COLUMNS,
         "fit_roster_member", "training_rows",
     ]
     diagnostics_rows: list[dict[str, Any]] = []
-    with ledger_path.open("w", encoding="utf-8", newline="") as ledger_stream:
-        pd.DataFrame(columns=header).to_csv(ledger_stream, index=False)
-        ledger_stream.flush()
-        os.fsync(ledger_stream.fileno())
+    next_gameweek = first_gameweek
+    if resume:
+        previous_metadata, _, diagnostics_rows, last_completed = _load_resume_state(
+            ledger_path=ledger_path,
+            diagnostics_path=diagnostics_path,
+            metadata_path=metadata_path,
+            expected_metadata=metadata,
+            header=header,
+        )
+        resume_record = {
+            "previous_status": previous_metadata.get("status"),
+            "previous_last_gameweek": last_completed,
+        }
+        metadata = {**previous_metadata, **metadata}
+        metadata["status"] = "running"
+        metadata["last_forecast_gameweek_written"] = last_completed
+        metadata["resume_history"] = [
+            *previous_metadata.get("resume_history", []),
+            resume_record,
+        ]
+        for stale_result in (
+            "scored_gameweeks",
+            "prediction_metrics",
+            "squad_evaluation_summary",
+            "figures",
+        ):
+            metadata.pop(stale_result, None)
+        next_gameweek = last_completed + 1
 
-        for target_gameweek in range(first_gameweek, last_gameweek + 1):
+    _write_metadata(metadata_path, metadata)
+    mode = "a" if resume else "w"
+    with ledger_path.open(mode, encoding="utf-8", newline="") as ledger_stream:
+        if not resume:
+            pd.DataFrame(columns=header).to_csv(ledger_stream, index=False)
+            ledger_stream.flush()
+            os.fsync(ledger_stream.fileno())
+
+        for target_gameweek in range(next_gameweek, last_gameweek + 1):
             fold_timesteps = target_gameweek - 2
             fold = build_fold_panels(
                 gameweeks,
@@ -803,6 +945,7 @@ def run_walk_forward_study(
     target_accept_prob: float = 0.95,
     max_divergence_rate: float = 0.01,
     truncation: int = 6,
+    resume: bool = False,
 ) -> dict[str, pd.DataFrame]:
     """Run forecasts, score them, and replay model scores through the MILP."""
     output_dir = Path(output_dir)
@@ -823,6 +966,7 @@ def run_walk_forward_study(
         target_accept_prob=target_accept_prob,
         max_divergence_rate=max_divergence_rate,
         truncation=truncation,
+        resume=resume,
     )
     scored, prediction_metrics, week_metrics = evaluate_forecast_ledger(
         gameweeks, predictions, output_dir=output_dir
