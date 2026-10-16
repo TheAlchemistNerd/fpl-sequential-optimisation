@@ -173,17 +173,13 @@ four-model evaluation.
 
 ## Current run checkpoint
 
-At 2026-10-16 19:22 Africa/Nairobi, the local sampler process (PID 8932) was
-still active and metadata reported `status: running` through GW20. The durable
-forecast ledger contains 10,422 rows across GW7–GW20, with unique player-week
+At 2026-10-16 19:28 Africa/Nairobi, the local sampler process (PID 8932) was
+still active and metadata reported `status: running` through GW21. The durable
+forecast ledger contains 11,195 rows across GW7–GW21, with unique player-week
 keys, finite predictions, and each feature cutoff equal to the target week
-minus one. All 28 diagnostics for those fourteen persisted folds passed. The
-GW21 GMM fit has also passed, but its HMM fit is still running, so GW21 has no
-forecast rows yet. The diagnostic ledger last changed at 18:44 when the GW21
-GMM result was recorded; by 19:22 the HMM still had no diagnostic row, about
-38 minutes after that write. This exceeds the roughly 37-minute GW19 HMM
-runtime recorded above. The sampler remained responsive and CPU-active with no
-saved failure.
+minus one. All 30 diagnostics for these fifteen persisted folds passed. The
+GW21 HMM passed after about 39 minutes from the GW21 GMM diagnostic write; the
+sampler is now continuing, with no GW22 diagnostic or forecast written yet.
 
 | Fold / model | Training rows | Fit players | Active states | Divergences | Mean acceptance | Screen |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
@@ -193,12 +189,13 @@ saved failure.
 | GW19 HDP-HMM | 408 | 24 | 2 | 0 / 50 | 0.9971 | Pass |
 | GW20 HDP-GMM | 432 | 24 | 4 | 0 / 50 | 0.9953 | Pass |
 | GW20 HDP-HMM | 432 | 24 | 2 | 0 / 50 | 0.9999 | Pass |
-| GW21 HDP-GMM | 456 | 24 | 4 | 0 / 50 | 0.9963 | Pass; HMM pending |
+| GW21 HDP-GMM | 456 | 24 | 4 | 0 / 50 | 0.9963 | Pass |
+| GW21 HDP-HMM | 456 | 24 | 4 | 0 / 50 | 0.9975 | Pass |
 
-The GW19 HMM fit followed its GMM fit by about 37 minutes; GW20 HMM also
-required an extended CPU fit. These are machine-specific runtime checkpoints,
-not full-run estimates. One chain and 50 retained draws provide diagnostic
-screening, not evidence of posterior convergence.
+The GW19 HMM fit followed its GMM fit by about 37 minutes; GW21 took about 39
+minutes from the GMM diagnostic write. These are machine-specific runtime
+checkpoints, not full-run estimates. One chain and 50 retained draws provide
+diagnostic screening, not evidence of posterior convergence.
 
 ## Prediction comparison: GW7–GW20; constrained replay: GW7–GW19
 
