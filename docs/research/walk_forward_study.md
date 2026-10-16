@@ -155,7 +155,7 @@ ledger using the full-range command above.
 
 ## Current run checkpoint
 
-At 2026-10-16 14:41 Africa/Nairobi, the local sampler process (PID 8932) was
+At 2026-10-16 14:43 Africa/Nairobi, the local sampler process (PID 8932) was
 active and responsive. The core metadata reported `status: running` through
 GW16, with 7,359 forecast rows for GW7–GW16. Both GW16 fits passed: GMM had
 0/50 divergences and mean acceptance 0.9984; HMM had 0/50 divergences and mean
@@ -164,6 +164,9 @@ has unique player-week keys, finite predictions, and the expected cutoff in
 every row (`feature_cutoff_gameweek = gameweek - 1`). Full-range scoring and
 replay remain pending. A separate GW7–GW16 four-predictor comparison has
 completed with `status: partial_complete`; its evidence is summarized below.
+The GW17 GMM fit has since passed its screen (0/50 divergences; mean acceptance
+0.9576). The HMM fit is still sampling, so no GW17 forecasts have been written
+and the last durable forecast remains GW16.
 
 ## Interim four-predictor comparison: GW7–GW16
 
