@@ -174,11 +174,11 @@ four-model evaluation.
 
 ## Current run checkpoint
 
-At 2026-10-16 22:50 Africa/Nairobi, the local sampler was active and metadata
-reported `status: running` through GW23 of 38. The durable forecast ledger
-contains 12,781 rows across GW7–GW23, with unique player-week keys, finite
-predictions, and each feature cutoff equal to the target week minus one. All 34
-diagnostics for these seventeen persisted folds passed.
+At 2026-10-16 23:45 Africa/Nairobi, the local sampler was active and metadata
+reported `status: running` through GW24 of 38. The durable forecast ledger
+contains 13,590 rows across GW7–GW24, with unique player-week keys, finite
+predictions, and each feature cutoff equal to the target week minus one. All 36
+diagnostics for these eighteen persisted folds passed.
 
 | Fold / model | Training rows | Fit players | Active states | Divergences | Mean acceptance | Screen |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
@@ -194,6 +194,8 @@ diagnostics for these seventeen persisted folds passed.
 | GW22 HDP-HMM | 480 | 24 | 4 | 0 / 50 | 0.9857 | Pass |
 | GW23 HDP-GMM | 504 | 24 | 3 | 0 / 50 | 0.9949 | Pass |
 | GW23 HDP-HMM | 504 | 24 | 4 | 0 / 50 | 0.9985 | Pass |
+| GW24 HDP-GMM | 528 | 24 | 3 | 0 / 50 | 0.9996 | Pass |
+| GW24 HDP-HMM | 528 | 24 | 4 | 0 / 50 | 0.9859 | Pass |
 
 These are machine-specific runtime checkpoints, not full-run estimates. One
 chain and 50 retained draws provide diagnostic screening, not evidence of
