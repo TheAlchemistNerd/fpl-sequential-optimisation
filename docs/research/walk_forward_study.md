@@ -177,6 +177,8 @@ GW13's first attempt passed for GMM (0/50 divergences) but failed for HMM (6/50 
 
 The resume path records sampler settings per fold and supports an explicit retry after a saved sampler failure. The GW12 fold took about 18 minutes locally, and the longer fold histories make a minutes-scale full-season run unrealistic on this CPU setup. At the 12:31 status check the local process was still running; the metadata, forecast ledger, and diagnostics in the output directory are the authoritative checkpoint and will continue to advance as folds finish.
 
+The retry/resume implementation was rechecked on 2026-10-16 with `venv\Scripts\python.exe -m pytest tests/test_walk_forward.py -q`: all 12 focused walk-forward tests passed in 18.83 seconds. This covers runner and checkpoint contracts; it does not establish sampler convergence or complete the full-season evaluation.
+
 The practical target for a faster full-season run is a cloud VM or notebook with more compute. A GPU is only a candidate acceleration path: JAX must use a compatible CUDA build, and the first-fold time and diagnostics must be benchmarked there before estimating total runtime. No remote machine, notebook, or GPU run has been started as part of this pilot, and no minutes-scale runtime is claimed.
 
 ## Artifacts
