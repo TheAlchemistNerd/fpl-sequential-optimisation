@@ -1,5 +1,5 @@
 {
-  "status": "sampling_diagnostics_failed",
+  "status": "running",
   "season": "2023-24",
   "source_file_name": "fpl_2023_24_merged_gw.csv",
   "source_url": "https://github.com/vaastav/Fantasy-Premier-League/blob/master/data/2023-24/gws/merged_gw.csv",
@@ -45,10 +45,10 @@
   ],
   "players_per_position": 6,
   "seed": 42,
-  "num_warmup": 200,
+  "num_warmup": 400,
   "num_samples": 50,
   "num_chains": 1,
-  "nuts_target_accept_prob": 0.99,
+  "nuts_target_accept_prob": 0.995,
   "max_divergence_rate": 0.01,
   "chain_method_requested": "parallel",
   "truncation": 4,
@@ -92,22 +92,83 @@
     {
       "previous_status": "running",
       "previous_last_gameweek": 11
+    },
+    {
+      "previous_status": "sampling_diagnostics_failed",
+      "previous_last_gameweek": 12,
+      "previous_sampler_settings": {
+        "num_warmup": 200,
+        "num_samples": 50,
+        "num_chains": 1,
+        "nuts_target_accept_prob": 0.99,
+        "max_divergence_rate": 0.01
+      },
+      "current_sampler_settings": {
+        "num_warmup": 400,
+        "num_samples": 50,
+        "num_chains": 1,
+        "nuts_target_accept_prob": 0.995,
+        "max_divergence_rate": 0.01
+      }
     }
   ],
-  "failure": {
-    "gameweek": 13,
-    "model": "hdp_hmm",
-    "reason": "NUTS divergence rate or mean acceptance probability failed the configured screening gate",
-    "diagnostic": {
+  "sampler_retry_history": [
+    {
       "gameweek": 13,
-      "model": "hdp_hmm",
-      "training_rows": 264,
-      "fit_players": 24,
-      "active_states": 4,
-      "num_divergences": 6,
-      "divergence_rate": 0.12,
-      "mean_accept_prob": 0.9891883730888367,
-      "diagnostic_gate_passed": false
+      "failure": {
+        "gameweek": 13,
+        "model": "hdp_hmm",
+        "reason": "NUTS divergence rate or mean acceptance probability failed the configured screening gate",
+        "diagnostic": {
+          "gameweek": 13,
+          "model": "hdp_hmm",
+          "training_rows": 264,
+          "fit_players": 24,
+          "active_states": 4,
+          "num_divergences": 6,
+          "divergence_rate": 0.12,
+          "mean_accept_prob": 0.9891883730888367,
+          "diagnostic_gate_passed": false
+        }
+      },
+      "failed_sampler_settings": {
+        "num_warmup": 200,
+        "num_samples": 50,
+        "num_chains": 1,
+        "nuts_target_accept_prob": 0.99,
+        "max_divergence_rate": 0.01
+      },
+      "failed_diagnostics": [
+        {
+          "gameweek": 13,
+          "model": "hdp_gmm",
+          "training_rows": 264,
+          "fit_players": 24,
+          "active_states": 4,
+          "num_divergences": 0,
+          "divergence_rate": 0.0,
+          "mean_accept_prob": 0.9690303802490234,
+          "diagnostic_gate_passed": true
+        },
+        {
+          "gameweek": 13,
+          "model": "hdp_hmm",
+          "training_rows": 264,
+          "fit_players": 24,
+          "active_states": 4,
+          "num_divergences": 6,
+          "divergence_rate": 0.12,
+          "mean_accept_prob": 0.9891883730888368,
+          "diagnostic_gate_passed": false
+        }
+      ],
+      "retry_sampler_settings": {
+        "num_warmup": 400,
+        "num_samples": 50,
+        "num_chains": 1,
+        "nuts_target_accept_prob": 0.995,
+        "max_divergence_rate": 0.01
+      }
     }
-  }
+  ]
 }
