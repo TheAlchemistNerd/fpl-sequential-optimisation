@@ -173,7 +173,7 @@ four-model evaluation.
 
 ## Current run checkpoint
 
-At 2026-10-16 19:59 Africa/Nairobi, the local sampler process (PID 8932) was
+At 2026-10-16 20:19 Africa/Nairobi, the local sampler process (PID 8932) was
 still active and metadata reported `status: running` through GW21. The durable
 forecast ledger contains 11,195 rows across GW7–GW21, with unique player-week
 keys, finite predictions, and each feature cutoff equal to the target week
@@ -331,7 +331,13 @@ GW13's first attempt passed for GMM (0/50 divergences) but failed for HMM (6/50 
 
 The resume path records sampler settings per fold and supports an explicit retry after a saved sampler failure. The GW12 fold took about 18 minutes locally; the GW14 HMM fit finished after more than 15 minutes of sampling following its GMM diagnostic. The GW15 GMM screen appeared about 15 minutes after the GW14 forecast checkpoint. Longer fold histories make a minutes-scale full-season run unrealistic on this CPU setup. The latest process state and durable forecast week are recorded in the Current run checkpoint section; metadata, forecast ledger, and diagnostics remain the authoritative artifacts.
 
-At the current revision, `venv\Scripts\python.exe -m pytest tests/test_direct_challenger.py tests/test_walk_forward.py tests/test_backtesting.py -q` passed 25 tests in 45.82 seconds, with 134 PuLP deprecation warnings. These tests cover signed Ridge predictions, cutoff invariance, stable-prefix validation, forecast scoring, and constrained replay. The earlier HDP-GMM/HMM estimator suite passed 19 tests on synthetic unit fixtures; the empirical study itself uses the verified Vaastav archive. Neither unit tests nor passing NUTS screening prove posterior convergence or complete the pending full-season evaluation.
+On 2026-10-16, the focused regression run passed 114 tests in 864.37 seconds across the walk-forward, direct-challenger, backtesting, HDP-GMM/HMM, data-pipeline, feature-engineering, and MILP suites. The exact command was:
+
+~~~powershell
+.\venv\Scripts\python.exe -m pytest tests\test_walk_forward.py tests\test_direct_challenger.py tests\test_backtesting.py tests\test_hdp_gmm.py tests\test_hdp_hmm.py tests\test_data_pipeline.py tests\test_feature_engineering.py tests\test_milp_solver.py -q
+~~~
+
+It emitted 224 PuLP deprecation warnings and no test failures. Unit fixtures include synthetic cases for isolated contracts; the historical forecasts and evaluation use the verified Vaastav archive. Passing these tests and the NUTS screening gate do not prove posterior convergence or complete the pending full-season evaluation.
 
 The practical target for a faster full-season run is a cloud VM or notebook with more compute. A GPU is only a candidate acceleration path: JAX must use a compatible CUDA build, and the first-fold time and diagnostics must be benchmarked there before estimating total runtime. No remote machine, notebook, or GPU run has been started as part of this pilot, and no minutes-scale runtime is claimed.
 
