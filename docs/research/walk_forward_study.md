@@ -193,26 +193,27 @@ required an extended CPU fit. These are machine-specific runtime checkpoints,
 not full-run estimates. One chain and 50 retained draws provide diagnostic
 screening, not evidence of posterior convergence.
 
-## Four-way prediction and squad comparison: GW7–GW19
+## Prediction comparison: GW7–GW20; constrained replay: GW7–GW19
 
-The separate direct-Ridge pass used the durable GW7–GW19 core prefix after both
+The separate direct-Ridge pass used the durable GW7–GW20 core prefix after both
 HDP diagnostic gates had passed for every selected gameweek. It matched each
 saved player-week key, preserved `feature_cutoff_gameweek = gameweek - 1`, and
 persisted its direct forecasts before joining outcomes. All four predictors
-were scored on the same 9,651 fresh-player observations:
+were scored on the same 10,422 fresh-player observations:
 
 | Predictor | Rows | MAE | RMSE | Mean error | Spearman |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Rolling form | 9,651 | 1.0419 | 2.0961 | 0.0143 | 0.6700 |
-| Direct Ridge | 9,651 | 1.0476 | 1.9927 | 0.0117 | 0.6470 |
-| HDP-GMM with smoothed state rewards | 9,651 | 1.6037 | 2.3122 | 0.4586 | 0.2712 |
-| HDP-HMM with smoothed state rewards | 9,651 | 1.6967 | 2.3871 | 0.5858 | 0.2439 |
+| Rolling form | 10,422 | 1.0434 | 2.0984 | 0.0087 | 0.6714 |
+| Direct Ridge | 10,422 | 1.0470 | 1.9974 | 0.0052 | 0.6480 |
+| HDP-GMM with smoothed state rewards | 10,422 | 1.5866 | 2.3079 | 0.4285 | 0.2700 |
+| HDP-HMM with smoothed state rewards | 10,422 | 1.6636 | 2.3698 | 0.5462 | 0.2688 |
 
 Rolling form had the lowest MAE and strongest rank correlation; Direct Ridge
 had the lowest RMSE. The state-reward challengers had higher errors and weaker
-ranking agreement on this one-season prefix. The four streams then fed the
-same 13-week constrained replay, starting from the shared seed-42 squad held
-through GW6:
+ranking agreement on this one-season prefix. The GW7–GW20 output is
+prediction-only, so it does not yet provide a squad comparison. The last
+completed constrained replay covers GW7–GW19 (13 weeks), with all four streams
+starting from the shared seed-42 squad held through GW6:
 
 | Policy | Net points | Gross points | Transfer-hit points | Transfers | Gameweeks |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -221,13 +222,28 @@ through GW6:
 | HDP-GMM MILP | 355 | 355 | 0 | 14 | 13 |
 | HDP-HMM MILP | 318 | 318 | 0 | 14 | 13 |
 
-These forecast and squad results are interim, single-season, single-seed
-evidence and do not establish general predictive or policy superiority. The
-archive-based prices and candidate availability remain proxies. Prediction
-ledgers, scored metrics, replay rows, metadata, and figures are saved under
+These forecast and squad results cover different interim windows and remain
+single-season, single-seed evidence; they do not establish general predictive
+or policy superiority. The archive-based prices and candidate availability
+remain proxies. The GW7–GW20 prediction-only ledger, metrics, metadata, and
+figures are saved under
+[`comparison_prefix_gw7_gw20_predictions_only`](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw20_predictions_only/).
+Its [weekly error chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw20_predictions_only/figures/prediction_error_by_gameweek.png),
+[weekly rank chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw20_predictions_only/figures/prediction_rank_correlation_by_gameweek.png),
+and [position error chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw20_predictions_only/figures/prediction_mae_by_position.png)
+show the fold-level variation behind the aggregate metrics. Reproduce this
+prediction-only extension with a new, empty output directory:
+
+~~~powershell
+.\venv\Scripts\python.exe -m src.research.direct_challenger --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --source-output reports/research/walk_forward_2023-24/full_season_2023-24 --through-gameweek 20 --output reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw20_reproduction --alpha 1.0 --predictions-only
+~~~
+
+The saved forecast ledger reproduces all four rows in `prediction_metrics.csv`
+exactly when read with round-trip float parsing.
+The GW7–GW19 replay rows and figures are saved under
 [`comparison_prefix_gw7_gw19_completed`](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_completed/).
-The run records `status: partial_complete`: its selected comparison ends at
-GW19 even though the source study has since written GW20. Figures include the
+The replay run records `status: partial_complete`; its selected comparison ends
+at GW19. Figures include the
 [weekly error chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_completed/figures/prediction_error_by_gameweek.png),
 [weekly rank chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_completed/figures/prediction_rank_correlation_by_gameweek.png),
 [position error chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_completed/figures/prediction_mae_by_position.png),
