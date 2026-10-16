@@ -173,13 +173,15 @@ four-model evaluation.
 
 ## Current run checkpoint
 
-At 2026-10-16 19:07 Africa/Nairobi, the local sampler process (PID 8932) was
+At 2026-10-16 19:16 Africa/Nairobi, the local sampler process (PID 8932) was
 still active and metadata reported `status: running` through GW20. The durable
 forecast ledger contains 10,422 rows across GW7–GW20, with unique player-week
 keys, finite predictions, and each feature cutoff equal to the target week
 minus one. All 28 diagnostics for those fourteen persisted folds passed. The
 GW21 GMM fit has also passed, but its HMM fit is still running, so GW21 has no
-forecast rows yet.
+forecast rows yet. The diagnostic ledger last changed at 18:44 when the GW21
+GMM result was recorded; by 19:16 the HMM still had no diagnostic row. The
+sampler remained responsive and CPU-active with no saved failure.
 
 | Fold / model | Training rows | Fit players | Active states | Divergences | Mean acceptance | Screen |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
