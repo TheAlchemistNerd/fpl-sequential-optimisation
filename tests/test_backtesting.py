@@ -181,3 +181,36 @@ def test_model_score_backtest_uses_saved_predictions_from_common_evaluation_star
     assert result.summary.iloc[0]["evaluation_gameweeks"] == 2
     assert result.gameweeks["is_evaluation_gameweek"].tolist() == [False, True, True]
     assert result.gameweeks.iloc[1]["transfers"] <= 2
+
+
+def test_replay_decides_before_reading_target_gameweek_outcomes(monkeypatch):
+    from src.backtesting import engine
+
+    history = _small_history(weeks=2)
+    original_decision = engine.make_decision
+    original_outcomes = engine.outcomes_for_gameweek
+    decision_made = False
+
+    def record_decision(*args, **kwargs):
+        nonlocal decision_made
+        decision_made = True
+        return original_decision(*args, **kwargs)
+
+    def require_decision_before_target_outcome(gameweeks, gameweek):
+        if int(gameweek) == 2:
+            assert decision_made, "GW2 outcomes were read before its squad decision"
+        return original_outcomes(gameweeks, gameweek)
+
+    monkeypatch.setattr(engine, "make_decision", record_decision)
+    monkeypatch.setattr(
+        engine, "outcomes_for_gameweek", require_decision_before_target_outcome
+    )
+
+    engine.run_backtest(
+        history,
+        strategies=("hold",),
+        seeds=(17,),
+        evaluation_start_gameweek=2,
+    )
+
+    assert decision_made
