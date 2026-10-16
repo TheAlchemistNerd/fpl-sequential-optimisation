@@ -169,12 +169,14 @@ four-model evaluation.
 
 ## Current run checkpoint
 
-At 2026-10-16 17:40 Africa/Nairobi, the local sampler process (PID 8932) was
+At 2026-10-16 17:49 Africa/Nairobi, the local sampler process (PID 8932) was
 still active and metadata reported `status: running` through GW19. The durable
 forecast ledger contains 9,651 forecasts across GW7–GW19, with unique
 player-week keys, and finite predictions. Every row records
 `feature_cutoff_gameweek` as the target gameweek minus one. All 26 fit
-diagnostics for these thirteen forecast folds passed.
+diagnostics for these thirteen forecast folds passed. The GW20 GMM fit has also
+passed, but the GW20 HMM fit is still pending; no GW20 forecast rows have been
+written before both model diagnostics pass.
 
 | Fold / model | Training rows | Fit players | Active states | Divergences | Mean acceptance | Screen |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
@@ -182,10 +184,11 @@ diagnostics for these thirteen forecast folds passed.
 | GW18 HDP-HMM | 384 | 24 | 4 | 0 / 50 | 1.0000 | Pass |
 | GW19 HDP-GMM | 408 | 24 | 2 | 0 / 50 | 0.9873 | Pass |
 | GW19 HDP-HMM | 408 | 24 | 2 | 0 / 50 | 0.9971 | Pass |
+| GW20 HDP-GMM | 432 | 24 | 4 | 0 / 50 | 0.9953 | Pass |
 
 The GW19 HMM diagnostic was written about 37 minutes after its GMM diagnostic.
 These are screening results from one chain with 50 retained draws, not evidence
-of posterior convergence. GW20–GW38 and the full-range four-predictor
+of posterior convergence. GW20 HMM, GW21–GW38, and the full-range four-predictor
 evaluation remain pending. The observed fold duration is not a full-run ETA.
 
 ## Prediction-only four-way comparison checkpoint: GW7–GW19
