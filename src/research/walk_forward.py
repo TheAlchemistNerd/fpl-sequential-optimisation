@@ -432,6 +432,10 @@ def _sampler_diagnostic_record(
     summary: dict[str, Any],
     retained_draws: int,
     max_divergence_rate: float,
+    num_warmup: int,
+    num_samples: int,
+    num_chains: int,
+    target_accept_prob: float,
 ) -> dict[str, Any]:
     """Summarize one fit and screen severe NUTS failures before forecasting."""
     divergences = int(summary["num_divergences"])
@@ -448,6 +452,11 @@ def _sampler_diagnostic_record(
         "divergence_rate": divergence_rate,
         "mean_accept_prob": mean_accept_prob,
         "diagnostic_gate_passed": passed,
+        "num_warmup": num_warmup,
+        "num_samples": num_samples,
+        "num_chains": num_chains,
+        "target_accept_prob": target_accept_prob,
+        "max_divergence_rate": max_divergence_rate,
     }
 
 
@@ -492,6 +501,8 @@ def _load_resume_state(
         raise ValueError(f"Cannot resume; missing run artifacts: {missing_paths}")
 
     previous_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    previous_status = previous_metadata.get("status")
+    retrying_failed_fit = previous_status == "sampling_diagnostics_failed"
     compared_keys = (
         "season",
         "source_file_name",
@@ -504,13 +515,13 @@ def _load_resume_state(
         "fit_roster_selected_from_gw1",
         "players_per_position",
         "seed",
-        "num_warmup",
         "num_samples",
         "num_chains",
-        "nuts_target_accept_prob",
         "truncation",
         "model_features",
     )
+    if not retrying_failed_fit:
+        compared_keys += ("num_warmup", "nuts_target_accept_prob")
     for key in compared_keys:
         if previous_metadata.get(key) != expected_metadata.get(key):
             raise ValueError(
@@ -561,12 +572,15 @@ def _load_resume_state(
     diagnostic_weeks = diagnostics["gameweek"].astype(int)
     orphan_mask = diagnostic_weeks > previous_last
     trim_orphan_diagnostics = orphan_mask.any()
+    failed_attempt_rows: list[dict[str, Any]] = []
+    if retrying_failed_fit and not trim_orphan_diagnostics:
+        raise ValueError("Cannot retry; saved sampler failure has no orphan diagnostic rows")
     if trim_orphan_diagnostics:
         orphan_diagnostics = diagnostics.loc[orphan_mask]
         orphan_weeks = set(orphan_diagnostics["gameweek"].astype(int))
         orphan_models = orphan_diagnostics["model"].astype(str)
         if (
-            previous_metadata.get("status") != "running"
+            previous_status not in {"running", "sampling_diagnostics_failed"}
             or previous_last >= requested_last
             or orphan_weeks != {previous_last + 1}
             or len(orphan_diagnostics) > len(expected_models)
@@ -576,7 +590,43 @@ def _load_resume_state(
             raise ValueError(
                 "Cannot resume; diagnostics extend beyond the saved forecast prefix"
             )
+        if retrying_failed_fit:
+            failure = previous_metadata.get("failure", {})
+            failure_gameweek = int(failure.get("gameweek", -1))
+            failure_model = str(failure.get("model", ""))
+            failed_rows = orphan_diagnostics.loc[
+                (orphan_diagnostics["model"].astype(str) == failure_model)
+                & ~orphan_diagnostics["diagnostic_gate_passed"].astype(bool)
+            ]
+            if (
+                failure_gameweek != previous_last + 1
+                or failure_model not in expected_models
+                or len(failed_rows) != 1
+                or float(failed_rows.iloc[0]["num_divergences"])
+                != float(failure.get("diagnostic", {}).get("num_divergences", -1))
+            ):
+                raise ValueError(
+                    "Cannot retry; saved sampler failure does not match the orphan diagnostics"
+                )
+            failed_attempt_rows = orphan_diagnostics.to_dict(orient="records")
         diagnostics = diagnostics.loc[~orphan_mask].copy()
+
+    # Older checkpoints predate per-fold sampler settings. Backfill from their
+    # recorded run configuration before a resumed run adds rows under new settings.
+    legacy_sampler_settings = {
+        "num_warmup": "num_warmup",
+        "num_samples": "num_samples",
+        "num_chains": "num_chains",
+        "target_accept_prob": "nuts_target_accept_prob",
+        "max_divergence_rate": "max_divergence_rate",
+    }
+    for column, metadata_key in legacy_sampler_settings.items():
+        if column not in diagnostics:
+            diagnostics[column] = previous_metadata.get(metadata_key)
+        else:
+            diagnostics[column] = diagnostics[column].fillna(
+                previous_metadata.get(metadata_key)
+            )
 
     for gameweek in expected_weeks:
         fold = diagnostics.loc[diagnostics["gameweek"].astype(int) == gameweek]
@@ -604,6 +654,37 @@ def _load_resume_state(
         )
         diagnostics.to_csv(diagnostic_tmp_path, index=False)
         os.replace(diagnostic_tmp_path, diagnostics_path)
+
+    if retrying_failed_fit:
+        retry_history = list(previous_metadata.get("sampler_retry_history", []))
+        retry_history.append(
+            {
+                "gameweek": previous_last + 1,
+                "failure": previous_metadata.get("failure"),
+                "failed_sampler_settings": {
+                    key: previous_metadata.get(key)
+                    for key in (
+                        "num_warmup",
+                        "num_samples",
+                        "num_chains",
+                        "nuts_target_accept_prob",
+                        "max_divergence_rate",
+                    )
+                },
+                "failed_diagnostics": failed_attempt_rows,
+                "retry_sampler_settings": {
+                    key: expected_metadata.get(key)
+                    for key in (
+                        "num_warmup",
+                        "num_samples",
+                        "num_chains",
+                        "nuts_target_accept_prob",
+                        "max_divergence_rate",
+                    )
+                },
+            }
+        )
+        previous_metadata["sampler_retry_history"] = retry_history
 
     return (
         previous_metadata,
@@ -726,6 +807,26 @@ def generate_forecast_ledger(
         resume_record = {
             "previous_status": previous_metadata.get("status"),
             "previous_last_gameweek": last_completed,
+            "previous_sampler_settings": {
+                key: previous_metadata.get(key)
+                for key in (
+                    "num_warmup",
+                    "num_samples",
+                    "num_chains",
+                    "nuts_target_accept_prob",
+                    "max_divergence_rate",
+                )
+            },
+            "current_sampler_settings": {
+                key: metadata.get(key)
+                for key in (
+                    "num_warmup",
+                    "num_samples",
+                    "num_chains",
+                    "nuts_target_accept_prob",
+                    "max_divergence_rate",
+                )
+            },
         }
         metadata = {**previous_metadata, **metadata}
         metadata["status"] = "running"
@@ -734,6 +835,7 @@ def generate_forecast_ledger(
             *previous_metadata.get("resume_history", []),
             resume_record,
         ]
+        metadata.pop("failure", None)
         for stale_result in (
             "scored_gameweeks",
             "prediction_metrics",
@@ -817,6 +919,10 @@ def generate_forecast_ledger(
                 summary=gmm_summary,
                 retained_draws=num_samples * num_chains,
                 max_divergence_rate=max_divergence_rate,
+                num_warmup=num_warmup,
+                num_samples=num_samples,
+                num_chains=num_chains,
+                target_accept_prob=target_accept_prob,
             )
             diagnostics_rows.append(gmm_diagnostic)
             _require_sampler_diagnostics(
@@ -860,6 +966,10 @@ def generate_forecast_ledger(
                 summary=hmm_summary,
                 retained_draws=num_samples * num_chains,
                 max_divergence_rate=max_divergence_rate,
+                num_warmup=num_warmup,
+                num_samples=num_samples,
+                num_chains=num_chains,
+                target_accept_prob=target_accept_prob,
             )
             diagnostics_rows.append(hmm_diagnostic)
             _require_sampler_diagnostics(

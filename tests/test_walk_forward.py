@@ -217,6 +217,10 @@ def test_sampler_diagnostic_gate_stops_before_forecast_and_saves_failure(tmp_pat
         },
         retained_draws=50,
         max_divergence_rate=0.01,
+        num_warmup=200,
+        num_samples=50,
+        num_chains=1,
+        target_accept_prob=0.99,
     )
     metadata = {"status": "running"}
 
@@ -309,10 +313,125 @@ def test_resume_continues_only_after_a_screened_contiguous_fold(monkeypatch, tmp
     assert set(diagnostics["gameweek"]) == {7, 8}
     assert calls == {"gmm": 2, "hmm": 2}
     assert metadata["last_forecast_gameweek_written"] == 8
-    assert metadata["resume_history"] == [
-        {"previous_status": "running", "previous_last_gameweek": 7}
-    ]
+    assert metadata["resume_history"][0]["previous_status"] == "running"
+    assert metadata["resume_history"][0]["previous_last_gameweek"] == 7
     assert len(pd.read_csv(diagnostics_path)) == 4
+
+
+def test_resume_retries_failed_fold_with_tuned_sampler_and_preserves_failure(
+    monkeypatch, tmp_path
+):
+    import json
+
+    from src.research import walk_forward
+
+    history = _small_history(weeks=8)
+    source = tmp_path / "historical.csv"
+    source.write_text("fixture source fingerprint", encoding="utf-8")
+    output = tmp_path / "study"
+    calls = {"gmm": 0, "hmm": 0}
+    good_summary = {
+        "num_divergences": 0,
+        "mean_accept_prob": 0.98,
+        "active_clusters": 2,
+    }
+    failed_summary = {
+        "num_divergences": 1,
+        "mean_accept_prob": 0.99,
+        "active_clusters": 2,
+    }
+
+    def fit_gmm(*args, **kwargs):
+        calls["gmm"] += 1
+        return {}, good_summary
+
+    def fit_hmm(*args, **kwargs):
+        calls["hmm"] += 1
+        if calls["hmm"] == 2:
+            return {}, failed_summary
+        return {}, good_summary
+
+    monkeypatch.setattr(walk_forward, "run_hdp_gmm", fit_gmm)
+    monkeypatch.setattr(walk_forward, "run_hdp_hmm", fit_hmm)
+    monkeypatch.setattr(
+        walk_forward,
+        "predict_hdp_gmm",
+        lambda samples, train_x, train_codes, train_points, target_x, target_ids, player_map:
+            np.zeros(len(target_x)),
+    )
+    monkeypatch.setattr(
+        walk_forward,
+        "predict_hdp_hmm",
+        lambda samples, train, train_x, train_points, target_x, target_ids, **kwargs:
+            np.zeros(len(target_x)),
+    )
+    options = {
+        "output_dir": output,
+        "season": "test",
+        "source_path": source,
+        "first_gameweek": 7,
+        "last_gameweek": 8,
+        "players_per_position": 1,
+        "seed": 4,
+        "num_warmup": 2,
+        "num_samples": 2,
+        "num_chains": 1,
+        "target_accept_prob": 0.95,
+        "max_divergence_rate": 0.01,
+        "truncation": 2,
+    }
+
+    with pytest.raises(RuntimeError, match="failed NUTS diagnostics"):
+        walk_forward.generate_forecast_ledger(history, **options)
+
+    metadata_path = output / "run_metadata.json"
+    failed_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert failed_metadata["status"] == "sampling_diagnostics_failed"
+    assert failed_metadata["last_forecast_gameweek_written"] == 7
+
+    # Exercise recovery of the historical diagnostic schema, which did not
+    # record sampler settings in each row.
+    diagnostics_path = output / "fit_diagnostics.csv"
+    diagnostics = pd.read_csv(diagnostics_path)
+    diagnostics.drop(
+        columns=[
+            "num_warmup",
+            "num_samples",
+            "num_chains",
+            "target_accept_prob",
+            "max_divergence_rate",
+        ],
+        errors="ignore",
+    ).to_csv(diagnostics_path, index=False)
+
+    resumed, diagnostics, metadata = walk_forward.generate_forecast_ledger(
+        history,
+        resume=True,
+        num_warmup=4,
+        target_accept_prob=0.995,
+        **{key: value for key, value in options.items() if key not in {"num_warmup", "target_accept_prob"}},
+    )
+
+    assert set(resumed["gameweek"]) == {7, 8}
+    assert calls == {"gmm": 3, "hmm": 3}
+    assert set(diagnostics["gameweek"]) == {7, 8}
+    gw7 = diagnostics.loc[diagnostics["gameweek"] == 7]
+    gw8 = diagnostics.loc[diagnostics["gameweek"] == 8]
+    assert set(gw7["num_warmup"]) == {2}
+    assert set(gw7["target_accept_prob"]) == {0.95}
+    assert set(gw8["num_warmup"]) == {4}
+    assert set(gw8["target_accept_prob"]) == {0.995}
+    assert metadata["status"] == "forecasts_complete"
+    assert "failure" not in metadata
+    assert metadata["resume_history"][-1]["previous_status"] == "sampling_diagnostics_failed"
+    retry = metadata["sampler_retry_history"][-1]
+    assert retry["gameweek"] == 8
+    assert len(retry["failed_diagnostics"]) == 2
+    assert retry["failure"]["model"] == "hdp_hmm"
+    assert any(
+        row["model"] == "hdp_hmm" and not row["diagnostic_gate_passed"]
+        for row in retry["failed_diagnostics"]
+    )
 
 
 def test_plot_study_artifacts_regenerates_all_figures_from_saved_csvs(tmp_path):

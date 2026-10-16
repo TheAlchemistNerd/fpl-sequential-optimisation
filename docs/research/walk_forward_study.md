@@ -108,7 +108,7 @@ The command uses a resource-constrained exploratory setting: one chain, 25 warmu
 
 The run metadata records the input checksum, requested folds, cutoff and feature rules, selected fit cohort, model feature list, seed, truncation, MCMC settings, and JAX device count. Each target fold derives separate GMM and HMM random keys from the seed and gameweek. For exact reproduction, retain the input archive and the dependency versions used for the run.
 
-The longer locally measured configuration uses 200 warmup steps, 50 retained draws, one chain, target acceptance 0.99, four states, and six fit players per position. The full-season runner writes to `reports/research/walk_forward_2023-24/full_season_2023-24/`. This is an exploratory compute setting: passing the divergence and acceptance screen does not establish posterior convergence.
+The initial full-season configuration used 200 warmup steps, 50 retained draws, one chain, target acceptance 0.99, four states, and six fit players per position. The full-season runner writes to `reports/research/walk_forward_2023-24/full_season_2023-24/`. This is an exploratory compute setting: passing the divergence and acceptance screen does not establish posterior convergence.
 
 The full-season command used in the local run is:
 
@@ -116,7 +116,13 @@ The full-season command used in the local run is:
 .\venv\Scripts\python.exe -m src.research --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --output reports/research/walk_forward_2023-24/full_season_2023-24 --season 2023-24 --first-gameweek 7 --last-gameweek 38 --warmup 200 --samples 50 --chains 1 --target-accept 0.99 --max-divergence-rate 0.01 --truncation 4 --players-per-position 6 --seed 42
 ~~~
 
-An interrupted run can be continued by repeating its command with `--resume`, the same source file and model settings, and the same output directory. Resume validates the source hash and coverage, fit roster, feature and sampler settings, contiguous player-week ledger, and both models' passing diagnostics before appending the next fold. If interruption left one or two diagnostic rows for the next gameweek but no forecast rows, resume drops those orphan rows and refits that fold. Failed runs, partial forecast ledgers, and mismatched or diagnostic-free prefixes are rejected; use a new output directory when changing the data or configuration.
+An interrupted run can be continued by repeating its command with `--resume`, the same source file and model settings, and the same output directory. Resume validates the source hash and coverage, fit roster, feature settings, contiguous player-week ledger, and both models' passing diagnostics before appending the next fold. If interruption left one or two diagnostic rows for the next gameweek but no forecast rows, resume drops those orphan rows and refits that fold. After a saved sampler-screen failure, resume also verifies that the failed diagnostics belong to exactly the next unwritten fold, archives that attempt in `sampler_retry_history`, and permits a retry to change warmup and target acceptance while keeping the source, roster, seed, retained draws, chain count, model, and divergence gate fixed. Per-fold diagnostic rows record their sampler settings so retries do not misstate the settings used for earlier folds. Invalid or mismatched prefixes remain rejected.
+
+The first GW13 HMM fit exceeded the divergence screen, so its forecasts were withheld. The retry keeps 50 retained draws, one chain, four states, the same seed, and the 1% gate, while increasing warmup and target acceptance:
+
+~~~powershell
+.\venv\Scripts\python.exe -m src.research --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --output reports/research/walk_forward_2023-24/full_season_2023-24 --season 2023-24 --first-gameweek 7 --last-gameweek 38 --warmup 400 --samples 50 --chains 1 --target-accept 0.995 --max-divergence-rate 0.01 --truncation 4 --players-per-position 6 --seed 42 --resume
+~~~
 
 ## Compute placement and troubleshooting record
 
@@ -165,7 +171,11 @@ On this single week, rolling form had lower point error and stronger rank correl
 | HDP-GMM MILP | 9 | 9 | 0 | 2 |
 | HDP-HMM MILP | 13 | 13 | 0 | 2 |
 
-This one-gameweek replay is downstream evidence for the pipeline, not a strategy result. It uses the archive's proxy prices and eligibility, one initial seed, and no chips or manager-specific ownership history. The detailed forecast ledger, scored rows, metrics, replay, diagnostics, metadata, and figures are saved under [`reports/research/walk_forward_2023-24/diagnostic_pass_gw7`](../../reports/research/walk_forward_2023-24/diagnostic_pass_gw7/). A separate full-season run is in progress in [`reports/research/walk_forward_2023-24/full_season_2023-24`](../../reports/research/walk_forward_2023-24/full_season_2023-24/). At the status check on 2026-10-16 11:42 Africa/Nairobi, its metadata reported `status: running` and `last_forecast_gameweek_written: 12`; the forecast ledger contained contiguous, cutoff-valid folds for GW7–GW12, and both GW12 sampler diagnostics passed with zero divergences. Full-season scoring, squad replay, and figures remain pending until all requested folds finish. The resumed GW12 fold took about 18 minutes locally; later folds have longer histories, so this CPU setup cannot support a minutes-scale full-season estimate.
+This one-gameweek replay is downstream evidence for the pipeline, not a strategy result. It uses the archive's proxy prices and eligibility, one initial seed, and no chips or manager-specific ownership history. The detailed forecast ledger, scored rows, metrics, replay, diagnostics, metadata, and figures are saved under [`reports/research/walk_forward_2023-24/diagnostic_pass_gw7`](../../reports/research/walk_forward_2023-24/diagnostic_pass_gw7/). The full-season run is at a saved failed-fit checkpoint in [`reports/research/walk_forward_2023-24/full_season_2023-24`](../../reports/research/walk_forward_2023-24/full_season_2023-24/). At the status check on 2026-10-16 11:59 Africa/Nairobi, its metadata reported `status: sampling_diagnostics_failed` and `last_forecast_gameweek_written: 12`. The forecast ledger still contains the contiguous, cutoff-valid GW7–GW12 prefix; full-season scoring, squad replay, and figures remain pending.
+
+GW13's GMM passed with 0/50 divergences, but its HMM had 6/50 divergences (12%) and mean acceptance probability 0.9892 under the 0.99 target. That exceeds the configured 1% divergence screen, so GW13 predictions were correctly withheld. The failed fit is recorded in run metadata, and both GW13 diagnostic rows remain in the diagnostic ledger until retry; they are not scored or included in the valid forecast prefix. The GW12 fold took about 18 minutes locally, and the longer fold histories make a minutes-scale full-season run unrealistic on this CPU setup.
+
+The resume path now supports an explicit retry after a saved sampler failure. It preserves the failed attempt in `sampler_retry_history`, removes failed-fold diagnostics from the accepted-fit ledger, and records warmup, retained draws, chains, target acceptance, and the divergence gate per fold. Only warmup and target acceptance may change for this retry; the data, roster, seed, retained draws, chain count, model, and divergence gate remain fixed. This keeps the earlier folds' settings visible while allowing the failed target fold to be retuned without weakening the diagnostic gate.
 
 The practical target for a faster full-season run is a cloud VM or notebook with more compute. A GPU is only a candidate acceleration path: JAX must use a compatible CUDA build, and the first-fold time and diagnostics must be benchmarked there before estimating total runtime. No remote machine, notebook, or GPU run has been started as part of this pilot, and no minutes-scale runtime is claimed.
 
@@ -176,7 +186,7 @@ The output directory contains:
 | File | Contents |
 | --- | --- |
 | `predictions.csv` | Durable pre-outcome forecast ledger, one row per player and target gameweek |
-| `fit_diagnostics.csv` | Fold/model training size, fit cohort size, active states, divergences, and mean acceptance probability |
+| `fit_diagnostics.csv` | Fold/model training size, fit cohort size, active states, divergences, mean acceptance probability, and per-fold sampler settings |
 | `predictions_scored.csv` | Fresh-candidate predictions joined to realized points after forecast generation |
 | `prediction_metrics.csv` | Overall error and ranking metrics by predictor |
 | `prediction_week_metrics.csv` | Metrics by gameweek and predictor |
@@ -189,7 +199,7 @@ The output directory contains:
 | `figures/cumulative_squad_points.png` | Cumulative evaluation-window net points for each replay policy |
 | `run_metadata.json` | Source fingerprint, run configuration, results, replay settings, and caveats |
 
-The prediction ledger is the key audit artifact: it can be scored again without refitting, while `run_metadata.json` identifies the source and configuration. The metadata status advances from `running` to `forecasts_complete` and finally `complete` as artifacts are produced. An interrupted fold leaves a partial ledger and a `running` status, which should be treated as incomplete.
+The prediction ledger is the key audit artifact: it can be scored again without refitting, while `run_metadata.json` identifies the source and configuration. The metadata status advances from `running` to `forecasts_complete` and finally `complete` as artifacts are produced. An interrupted fold leaves an incomplete prefix and a `running` status. A sampler-screen failure leaves the prior forecast prefix intact, records the failed attempt, and can be retried explicitly; failed diagnostics never enter the accepted fit ledger or generate forecasts.
 
 The nested `diagnostic_pass_gw7/` directory contains the screened, scored, and replayed one-fold diagnostic (`status: diagnostic_complete`). The parent-directory ledger and metadata preserve the earlier 0.8-target run that failed sampling diagnostics; those forecasts were not scored and must not be combined with the passing GW7 artifacts. The separate `full_season_2023-24/` directory contains the in-progress full-season ledger and live run metadata; its partial forecasts are not final metrics or strategy results.
 
