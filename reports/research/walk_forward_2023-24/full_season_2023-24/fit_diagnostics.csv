@@ -24,3 +24,4 @@ gameweek,model,training_rows,fit_players,active_states,num_divergences,divergenc
 18,hdp_gmm,384,24,3,0,0.0,0.9997692704200745,True,400,50,1,0.995,0.01
 18,hdp_hmm,384,24,4,0,0.0,1.0,True,400,50,1,0.995,0.01
 19,hdp_gmm,408,24,2,0,0.0,0.9873374700546265,True,400,50,1,0.995,0.01
+19,hdp_hmm,408,24,2,0,0.0,0.9970628619194031,True,400,50,1,0.995,0.01
