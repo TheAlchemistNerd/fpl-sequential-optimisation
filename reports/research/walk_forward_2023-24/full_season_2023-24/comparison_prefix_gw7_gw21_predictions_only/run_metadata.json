@@ -1,0 +1,122 @@
+{
+  "status": "prediction_metrics_complete",
+  "comparison_scope": "durable source prefix only",
+  "comparison_type": "supplemental direct-points challenger",
+  "source_study_directory": "C:\\Users\\Philtechber&Ent\\AppData\\Local\\Temp\\fpl_wf_source_gw21_935865bc131f4e7aab395c769f93c376",
+  "source_study_status": "running",
+  "source_study_last_forecast_gameweek_written": 21,
+  "source_sha256": "e9c09c8856f1c86b4f920f46ddd5033af83409439dfda53be925df2a3e7c8a9e",
+  "source_prediction_snapshot_sha256": "2cf55b3f5aa75c285d2e36afe436bbabb8beb4fe648e7bed5154eca2800c125c",
+  "source_diagnostic_snapshot_sha256": "d71496f0769b266e775f168544fa7b835304486971c2bc954d8eb0bc6e816901",
+  "source_coverage": {
+    "normalized_player_gameweek_rows": 28742,
+    "unique_players": 865,
+    "first_gameweek": 1,
+    "last_gameweek": 38
+  },
+  "season": "2023-24",
+  "seed": 42,
+  "first_gameweek": 7,
+  "last_gameweek": 21,
+  "requested_last_gameweek": 38,
+  "diagnostic_gates_verified_for_selected_prefix": true,
+  "feature_cutoff_rule": "strictly before each target gameweek",
+  "forecast_persisted_before_target_outcomes_are_scored": true,
+  "direct_model": "sklearn.linear_model.Ridge",
+  "direct_model_alpha": 1.0,
+  "direct_model_target": "realized player-gameweek FPL points, including negative values",
+  "direct_model_features": [
+    "form_points",
+    "form_std",
+    "xgi_points",
+    "appearance_probability",
+    "expected_minutes",
+    "pos_GK",
+    "pos_DEF",
+    "pos_MID",
+    "pos_FWD"
+  ],
+  "direct_model_scaling": "StandardScaler fitted on earlier training rows within each fold",
+  "direct_model_training_scope": "all earlier player-gameweek rows in the fold, not the HDP fit cohort",
+  "direct_model_training_rows_by_gameweek": {
+    "7": 3431,
+    "8": 4149,
+    "9": 4871,
+    "10": 5596,
+    "11": 6326,
+    "12": 7057,
+    "13": 7790,
+    "14": 8533,
+    "15": 9280,
+    "16": 10033,
+    "17": 10790,
+    "18": 11548,
+    "19": 12313,
+    "20": 13082,
+    "21": 13853
+  },
+  "prediction_columns": [
+    "rolling_form",
+    "hdp_gmm",
+    "hdp_hmm",
+    "direct_ridge"
+  ],
+  "replay_strategies": [
+    "form_milp",
+    "direct_ridge_milp",
+    "hdp_gmm_milp",
+    "hdp_hmm_milp"
+  ],
+  "direct_prediction_ledger": "direct_ridge_predictions.csv",
+  "combined_prediction_ledger": "predictions_with_direct.csv",
+  "prediction_metrics": [
+    {
+      "model": "direct_ridge",
+      "n": 11195,
+      "mae": 1.0470778655938102,
+      "rmse": 1.9995191068741343,
+      "mean_error": -0.0017937909223074329,
+      "spearman": 0.6447810795918614
+    },
+    {
+      "model": "hdp_gmm",
+      "n": 11195,
+      "mae": 1.5907462661166771,
+      "rmse": 2.3140627226317756,
+      "mean_error": 0.4277742698690338,
+      "spearman": 0.26952779562893636
+    },
+    {
+      "model": "hdp_hmm",
+      "n": 11195,
+      "mae": 1.6447271037401263,
+      "rmse": 2.35992051472192,
+      "mean_error": 0.5151269019165697,
+      "spearman": 0.2764624039453583
+    },
+    {
+      "model": "rolling_form",
+      "n": 11195,
+      "mae": 1.0433541759714158,
+      "rmse": 2.100102196151696,
+      "mean_error": 0.0016242370105702018,
+      "spearman": 0.6684279277521172
+    }
+  ],
+  "squad_replay_status": "pending",
+  "squad_metrics": null,
+  "squad_metadata": null,
+  "visualizations": [
+    "figures\\prediction_error_by_gameweek.png",
+    "figures\\prediction_rank_correlation_by_gameweek.png",
+    "figures\\prediction_mae_by_position.png"
+  ],
+  "caveats": [
+    "This direct Ridge model is a supervised points challenger, not a points emission inside the HDP likelihood.",
+    "Raw FPL points are signed integers; Ridge predicts their conditional mean and is not a probabilistic count model.",
+    "The HDP challengers remain fitted to the fixed GW1-stratified cohort; direct Ridge uses all earlier player-week rows.",
+    "One archived season and one seed do not establish cross-season generalization or policy superiority.",
+    "Squad replay has not been run for this prediction-only output.",
+    "This output covers only a durable prefix of the requested source study and is not a full-season comparison."
+  ]
+}

@@ -164,7 +164,7 @@ command above remains the command that produces both prediction and squad
 results.
 
 ~~~powershell
-.\venv\Scripts\python.exe -m src.research.direct_challenger --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --source-output reports/research/walk_forward_2023-24/full_season_2023-24 --through-gameweek 19 --output reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_predictions_only --alpha 1.0 --predictions-only
+.\venv\Scripts\python.exe -m src.research.direct_challenger --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --source-output reports/research/walk_forward_2023-24/full_season_2023-24 --through-gameweek 21 --output reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw21_reproduction --alpha 1.0 --predictions-only
 ~~~
 
 This prefix remains an interim result, not the 38-week comparison. Run the
@@ -173,7 +173,7 @@ four-model evaluation.
 
 ## Current run checkpoint
 
-At 2026-10-16 19:28 Africa/Nairobi, the local sampler process (PID 8932) was
+At 2026-10-16 19:59 Africa/Nairobi, the local sampler process (PID 8932) was
 still active and metadata reported `status: running` through GW21. The durable
 forecast ledger contains 11,195 rows across GW7–GW21, with unique player-week
 keys, finite predictions, and each feature cutoff equal to the target week
@@ -197,27 +197,29 @@ minutes from the GMM diagnostic write. These are machine-specific runtime
 checkpoints, not full-run estimates. One chain and 50 retained draws provide
 diagnostic screening, not evidence of posterior convergence.
 
-## Prediction comparison: GW7–GW20; constrained replay: GW7–GW19
+## Prediction comparison: GW7–GW21; constrained replay: GW7–GW19
 
-The separate direct-Ridge pass used the durable GW7–GW20 core prefix after both
+The separate direct-Ridge pass used the durable GW7–GW21 core prefix after both
 HDP diagnostic gates had passed for every selected gameweek. It matched each
 saved player-week key, preserved `feature_cutoff_gameweek = gameweek - 1`, and
 persisted its direct forecasts before joining outcomes. All four predictors
-were scored on the same 10,422 fresh-player observations:
+were scored on the same 11,195 fresh-player observations across fifteen target
+gameweeks:
 
 | Predictor | Rows | MAE | RMSE | Mean error | Spearman |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Rolling form | 10,422 | 1.0434 | 2.0984 | 0.0087 | 0.6714 |
-| Direct Ridge | 10,422 | 1.0470 | 1.9974 | 0.0052 | 0.6480 |
-| HDP-GMM with smoothed state rewards | 10,422 | 1.5866 | 2.3079 | 0.4285 | 0.2700 |
-| HDP-HMM with smoothed state rewards | 10,422 | 1.6636 | 2.3698 | 0.5462 | 0.2688 |
+| Rolling form | 11,195 | 1.0434 | 2.1001 | 0.0016 | 0.6684 |
+| Direct Ridge | 11,195 | 1.0471 | 1.9995 | -0.0018 | 0.6448 |
+| HDP-GMM with smoothed state rewards | 11,195 | 1.5907 | 2.3141 | 0.4278 | 0.2695 |
+| HDP-HMM with smoothed state rewards | 11,195 | 1.6447 | 2.3599 | 0.5151 | 0.2765 |
 
-Rolling form had the lowest MAE and strongest rank correlation; Direct Ridge
-had the lowest RMSE. The state-reward challengers had higher errors and weaker
-ranking agreement on this one-season prefix. The GW7–GW20 output is
-prediction-only, so it does not yet provide a squad comparison. The last
-completed constrained replay covers GW7–GW19 (13 weeks), with all four streams
-starting from the shared seed-42 squad held through GW6:
+Rolling form retained the lowest MAE and strongest rank correlation; Direct
+Ridge had the lowest RMSE, with a near-zero mean error. Both latent state-reward
+challengers had materially higher point errors, positive bias, and weaker
+ranking agreement on this prefix. These are prediction results, not evidence of
+policy superiority. The GW7–GW21 output is prediction-only; the latest completed
+constrained replay covers GW7–GW19 (13 weeks), with all four streams starting
+from the shared seed-42 squad held through GW6:
 
 | Policy | Net points | Gross points | Transfer-hit points | Transfers | Gameweeks |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -229,17 +231,18 @@ starting from the shared seed-42 squad held through GW6:
 These forecast and squad results cover different interim windows and remain
 single-season, single-seed evidence; they do not establish general predictive
 or policy superiority. The archive-based prices and candidate availability
-remain proxies. The GW7–GW20 prediction-only ledger, metrics, metadata, and
+remain proxies. The GW7–GW21 prediction-only ledger, metrics, metadata, and
 figures are saved under
-[`comparison_prefix_gw7_gw20_predictions_only`](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw20_predictions_only/).
-Its [weekly error chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw20_predictions_only/figures/prediction_error_by_gameweek.png),
-[weekly rank chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw20_predictions_only/figures/prediction_rank_correlation_by_gameweek.png),
-and [position error chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw20_predictions_only/figures/prediction_mae_by_position.png)
-show the fold-level variation behind the aggregate metrics. Reproduce this
+[`comparison_prefix_gw7_gw21_predictions_only`](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw21_predictions_only/).
+Its [weekly error chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw21_predictions_only/figures/prediction_error_by_gameweek.png),
+[weekly rank chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw21_predictions_only/figures/prediction_rank_correlation_by_gameweek.png),
+and [position error chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw21_predictions_only/figures/prediction_mae_by_position.png)
+show fold- and position-level variation. The earlier GW7–GW20 prediction-only
+snapshot remains available as an audit checkpoint. Reproduce the current
 prediction-only extension with a new, empty output directory:
 
 ~~~powershell
-.\venv\Scripts\python.exe -m src.research.direct_challenger --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --source-output reports/research/walk_forward_2023-24/full_season_2023-24 --through-gameweek 20 --output reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw20_reproduction --alpha 1.0 --predictions-only
+.\venv\Scripts\python.exe -m src.research.direct_challenger --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --source-output reports/research/walk_forward_2023-24/full_season_2023-24 --through-gameweek 21 --output reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw21_reproduction --alpha 1.0 --predictions-only
 ~~~
 
 The saved forecast ledger reproduces all four rows in `prediction_metrics.csv`
@@ -354,13 +357,13 @@ The output directory contains:
 
 The prediction ledger is the key audit artifact: it can be scored again without refitting, while `run_metadata.json` identifies the source and configuration. The metadata status advances from `running` to `forecasts_complete` and finally `complete` as artifacts are produced. An interrupted fold leaves an incomplete prefix and a `running` status. A sampler-screen failure leaves the prior forecast prefix intact, records the failed attempt, and can be retried explicitly; failed diagnostics never enter the accepted fit ledger or generate forecasts.
 
-The nested `diagnostic_pass_gw7/` directory contains the screened, scored, and replayed one-fold diagnostic (`status: diagnostic_complete`). The parent-directory ledger and metadata preserve the earlier 0.8-target run that failed sampling diagnostics; those forecasts were not scored and must not be combined with the passing GW7 artifacts. The separate `full_season_2023-24/` directory contains the in-progress three-predictor ledger and live run metadata; its partial forecasts are not final metrics or strategy results. The `comparison_prefix_gw7_gw17_completed/` directory contains the latest completed four-predictor squad comparison; `comparison_prefix_gw7_gw16/` is the superseded ten-week prefix. `comparison_with_direct/` will contain the full 38-week comparison after the core run completes.
+The nested `diagnostic_pass_gw7/` directory contains the screened, scored, and replayed one-fold diagnostic (`status: diagnostic_complete`). The parent-directory ledger and metadata preserve the earlier 0.8-target run that failed sampling diagnostics; those forecasts were not scored and must not be combined with the passing GW7 artifacts. The `full_season_2023-24/` directory contains the in-progress three-predictor ledger and live run metadata; its partial forecasts are not final metrics or strategy results. `comparison_prefix_gw7_gw21_predictions_only/` contains the latest four-predictor accuracy pass and deliberately has no squad replay. Earlier four-predictor replay artifacts cover GW7–GW19, and the GW7–GW20 prediction-only output remains as a prior audit checkpoint. The watcher will write the full-range comparison to `comparison_full_range_gw7_gw38/` after the core run completes; that pass scores predictions before starting the constrained replay.
 
 The figures are generated from the saved metrics and replay ledger after the CSV artifacts have been written; they do not fit models or fetch outcomes. Error charts show point accuracy, the rank chart shows player-order agreement, and the cumulative replay chart shows realized constrained-portfolio outcomes. Use the CSVs for exact values and the PNGs for visual comparison; a smooth or rising line does not establish a statistically reliable advantage.
 
 ## Reading results and limitations
 
-Inspect predictive metrics before squad totals. A latent-state model that produces a better MILP outcome on a single replay but worse point or ranking metrics may have benefited from portfolio constraints, prices, or gameweek variance; it has not thereby demonstrated better forecasts. The core runner compares three predictors; the supplementary pass compares all four on the same player-week panel and evaluates all squad policies on the same seed and evaluation weeks.
+Inspect predictive metrics before squad totals. A latent-state model that produces a better MILP outcome on a single replay but worse point or ranking metrics may have benefited from portfolio constraints, prices, or gameweek variance; it has not thereby demonstrated better forecasts. The core runner compares three predictors. The supplementary direct-points pass first scores all four predictors on an identical player-week panel; when replay is requested, it then evaluates all squad policies on the same seed and evaluation weeks.
 
 The inference runner records divergences and mean acceptance probability. The GMM's active-state count uses posterior assignment mass; the HMM's active-state count uses global state-weight mass, so those counts are descriptive and should not be treated as directly comparable. These are basic warning signals, not a convergence assessment. Before making statistical claims, rerun with longer chains, inspect trace plots, effective sample sizes and split R-hat, vary seeds and fit cohorts, and repeat across seasons. The initial one-season result is an engineering and research pilot only.
 
