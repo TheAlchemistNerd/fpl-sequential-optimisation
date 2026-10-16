@@ -172,6 +172,8 @@ pending, so the runner has not yet written GW19 forecasts.
 | GW19 HDP-GMM | 408 | 24 | 2 | 0 / 50 | 0.9873 | Pass; HMM pending |
 
 The GW18 HMM diagnostic was written about 39 minutes after its GMM diagnostic.
+At the 17:21 check, the GW19 HMM sampler remained CPU-active about 33 minutes
+after its GMM diagnostic; no GW19 HMM diagnostic or forecast had been written.
 These are screening results from one chain with 50 retained draws, not evidence
 of posterior convergence. GW19–GW38 and the full-range four-predictor
 evaluation remain pending. The observed fold duration is not a full-run ETA.
