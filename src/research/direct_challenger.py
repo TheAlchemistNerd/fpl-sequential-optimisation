@@ -20,7 +20,7 @@ from sklearn.preprocessing import StandardScaler
 
 from src.backtesting.data import load_vaastav_merged
 from src.backtesting.engine import run_backtest, sha256_file
-from src.research.plots import plot_study_artifacts
+from src.research.plots import plot_prediction_artifacts, plot_study_artifacts
 from src.research.walk_forward import (
     MODEL_FEATURES,
     PREDICTION_COLUMNS,
@@ -158,13 +158,16 @@ def add_direct_ridge_comparison(
     output_dir: str | Path,
     alpha: float = 1.0,
     through_gameweek: int | None = None,
-) -> dict[str, pd.DataFrame]:
+    run_squad_replay: bool = True,
+) -> dict[str, pd.DataFrame | None]:
     """Create an isolated four-predictor comparison from a saved HDP prefix.
 
     The source run is read-only. A running source is accepted only when an
     explicit through_gameweek is within its durable forecast prefix. Direct
     forecasts and evaluation outputs are written separately, so an active or
-    completed HDP ledger keeps its schema and provenance.
+    completed HDP ledger keeps its schema and provenance. Set
+    ``run_squad_replay=False`` to finish prediction scoring before the more
+    resource-intensive constrained replay.
     """
     source_output_dir = Path(source_output_dir)
     output_dir = Path(output_dir)
@@ -322,23 +325,28 @@ def add_direct_ridge_comparison(
         prediction_columns=DIRECT_PREDICTION_COLUMNS,
     )
     position_metrics = pd.read_csv(output_dir / "prediction_position_metrics.csv")
-    replay_history = gameweeks.loc[
-        gameweeks["gameweek"].astype(int) <= effective_last_gameweek
-    ].copy()
-    replay = run_backtest(
-        replay_history,
-        strategies=COMPARISON_STRATEGIES,
-        seeds=(seed,),
-        season=season,
-        lookback=lookback,
-        max_stale_gameweeks=int(source_metadata["max_stale_gameweeks"]),
-        dataset_sha256=actual_hash,
-        prediction_ledger=merged,
-        evaluation_start_gameweek=first_gameweek,
-    )
-    replay.gameweeks.to_csv(output_dir / "squad_gameweeks.csv", index=False)
-    replay.summary.to_csv(output_dir / "squad_summary.csv", index=False)
-    figures = plot_study_artifacts(output_dir)
+    replay = None
+    figures: list[Path] = []
+    if run_squad_replay:
+        replay_history = gameweeks.loc[
+            gameweeks["gameweek"].astype(int) <= effective_last_gameweek
+        ].copy()
+        replay = run_backtest(
+            replay_history,
+            strategies=COMPARISON_STRATEGIES,
+            seeds=(seed,),
+            season=season,
+            lookback=lookback,
+            max_stale_gameweeks=int(source_metadata["max_stale_gameweeks"]),
+            dataset_sha256=actual_hash,
+            prediction_ledger=merged,
+            evaluation_start_gameweek=first_gameweek,
+        )
+        replay.gameweeks.to_csv(output_dir / "squad_gameweeks.csv", index=False)
+        replay.summary.to_csv(output_dir / "squad_summary.csv", index=False)
+        figures = plot_study_artifacts(output_dir)
+    else:
+        figures = plot_prediction_artifacts(output_dir)
     training_rows_by_gameweek = (
         direct.groupby("gameweek", sort=True)["direct_ridge_training_rows"]
         .first()
@@ -348,7 +356,11 @@ def add_direct_ridge_comparison(
 
     is_full_range = effective_last_gameweek == requested_last_gameweek
     comparison_metadata = {
-        "status": "complete" if is_full_range else "partial_complete",
+        "status": (
+            ("complete" if is_full_range else "partial_complete")
+            if replay is not None
+            else "prediction_metrics_complete"
+        ),
         "comparison_scope": (
             "full requested forecast range" if is_full_range else "durable source prefix only"
         ),
@@ -383,14 +395,20 @@ def add_direct_ridge_comparison(
         "direct_prediction_ledger": direct_path.name,
         "combined_prediction_ledger": predictions_with_direct_path.name,
         "prediction_metrics": prediction_metrics.to_dict(orient="records"),
-        "squad_metrics": replay.summary.to_dict(orient="records"),
-        "squad_metadata": replay.metadata,
+        "squad_replay_status": "complete" if replay is not None else "pending",
+        "squad_metrics": replay.summary.to_dict(orient="records") if replay is not None else None,
+        "squad_metadata": replay.metadata if replay is not None else None,
         "visualizations": [str(path.relative_to(output_dir)) for path in figures],
         "caveats": [
             "This direct Ridge model is a supervised points challenger, not a points emission inside the HDP likelihood.",
             "Raw FPL points are signed integers; Ridge predicts their conditional mean and is not a probabilistic count model.",
             "The HDP challengers remain fitted to the fixed GW1-stratified cohort; direct Ridge uses all earlier player-week rows.",
             "One archived season and one seed do not establish cross-season generalization or policy superiority.",
+            *(
+                ["Squad replay has not been run for this prediction-only output."]
+                if replay is None
+                else []
+            ),
             *(
                 ["This output covers only a durable prefix of the requested source study and is not a full-season comparison."]
                 if not is_full_range
@@ -405,8 +423,8 @@ def add_direct_ridge_comparison(
         "prediction_metrics": prediction_metrics,
         "prediction_week_metrics": week_metrics,
         "prediction_position_metrics": position_metrics,
-        "squad_gameweeks": replay.gameweeks,
-        "squad_summary": replay.summary,
+        "squad_gameweeks": replay.gameweeks if replay is not None else None,
+        "squad_summary": replay.summary if replay is not None else None,
     }
 
 
@@ -420,6 +438,11 @@ def main() -> None:
         "--through-gameweek",
         type=int,
         help="Explicitly compare a saved source prefix through this gameweek",
+    )
+    parser.add_argument(
+        "--predictions-only",
+        action="store_true",
+        help="Write and score forecasts without running the constrained squad replay",
     )
     args = parser.parse_args()
     source_output = Path(args.source_output)
@@ -436,15 +459,19 @@ def main() -> None:
         output_dir=output,
         alpha=args.alpha,
         through_gameweek=args.through_gameweek,
+        run_squad_replay=not args.predictions_only,
     )
     print("Player-point prediction metrics:")
     print(results["prediction_metrics"].to_string(index=False))
-    print("\nConstrained squad results:")
-    columns = [
-        "strategy", "evaluation_net_points", "evaluation_gross_points",
-        "evaluation_transfer_hits", "evaluation_transfers", "evaluation_gameweeks",
-    ]
-    print(results["squad_summary"].loc[:, columns].to_string(index=False))
+    if results["squad_summary"] is None:
+        print("\nConstrained squad replay: pending (predictions-only mode).")
+    else:
+        print("\nConstrained squad results:")
+        columns = [
+            "strategy", "evaluation_net_points", "evaluation_gross_points",
+            "evaluation_transfer_hits", "evaluation_transfers", "evaluation_gameweeks",
+        ]
+        print(results["squad_summary"].loc[:, columns].to_string(index=False))
 
 
 if __name__ == "__main__":

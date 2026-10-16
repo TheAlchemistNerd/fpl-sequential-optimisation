@@ -490,3 +490,30 @@ def test_plot_study_artifacts_regenerates_all_figures_from_saved_csvs(tmp_path):
         "cumulative_squad_points.png",
     ]
     assert all(path.is_file() and path.stat().st_size > 5_000 for path in paths)
+
+
+def test_plot_prediction_artifacts_does_not_require_squad_replay(tmp_path):
+    from src.research.plots import plot_prediction_artifacts
+
+    pd.DataFrame(
+        [
+            {"gameweek": 7, "model": model, "mae": 1.0 + i, "rmse": 2.0 + i, "spearman": 0.4 - i * 0.1}
+            for i, model in enumerate(("rolling_form", "direct_ridge", "hdp_gmm", "hdp_hmm"))
+        ]
+    ).to_csv(tmp_path / "prediction_week_metrics.csv", index=False)
+    pd.DataFrame(
+        [
+            {"position": position, "model": model, "mae": 1.0 + i}
+            for position in ("GK", "DEF", "MID", "FWD")
+            for i, model in enumerate(("rolling_form", "direct_ridge", "hdp_gmm", "hdp_hmm"))
+        ]
+    ).to_csv(tmp_path / "prediction_position_metrics.csv", index=False)
+
+    paths = plot_prediction_artifacts(tmp_path)
+
+    assert [path.name for path in paths] == [
+        "prediction_error_by_gameweek.png",
+        "prediction_rank_correlation_by_gameweek.png",
+        "prediction_mae_by_position.png",
+    ]
+    assert all(path.is_file() and path.stat().st_size > 5_000 for path in paths)

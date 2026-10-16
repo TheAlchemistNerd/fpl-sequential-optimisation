@@ -151,13 +151,25 @@ non-empty destination.
 .\venv\Scripts\python.exe -m src.research.direct_challenger --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --source-output reports/research/walk_forward_2023-24/full_season_2023-24 --through-gameweek 17 --output reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw17_reproduction --alpha 1.0
 ~~~
 
+To assess prediction accuracy on the newest saved prefix before running a
+constrained replay, add `--predictions-only`. This writes the direct forecast
+ledger, the four-model scored ledger, and overall, weekly, and positional
+metrics; metadata records `prediction_metrics_complete` and marks squad replay
+pending. Use a new output directory for each prefix. The final full-season
+command above remains the command that produces both prediction and squad
+results.
+
+~~~powershell
+.\venv\Scripts\python.exe -m src.research.direct_challenger --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --source-output reports/research/walk_forward_2023-24/full_season_2023-24 --through-gameweek 19 --output reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_predictions_only --alpha 1.0 --predictions-only
+~~~
+
 This prefix remains an interim result, not the 38-week comparison. Run the
 full-range command above against the complete source ledger for the final
 four-model evaluation.
 
 ## Current run checkpoint
 
-At 2026-10-16 17:25 Africa/Nairobi, the local sampler process (PID 8932) was
+At 2026-10-16 17:40 Africa/Nairobi, the local sampler process (PID 8932) was
 still active and metadata reported `status: running` through GW19. The durable
 forecast ledger contains 9,651 forecasts across GW7–GW19, with unique
 player-week keys, and finite predictions. Every row records
@@ -175,6 +187,32 @@ The GW19 HMM diagnostic was written about 37 minutes after its GMM diagnostic.
 These are screening results from one chain with 50 retained draws, not evidence
 of posterior convergence. GW20–GW38 and the full-range four-predictor
 evaluation remain pending. The observed fold duration is not a full-run ETA.
+
+## Prediction-only four-way comparison checkpoint: GW7–GW19
+
+At 17:38 Africa/Nairobi, the separate direct-Ridge pass used the durable GW7–GW19
+core ledger. It matched every saved player-week key, retained the same
+feature cutoff (`target gameweek - 1`), persisted the direct forecasts before
+joining outcomes, and scored all four predictors on the same 9,651 fresh-player
+observations. No squad replay was run for this checkpoint; `run_metadata.json`
+records `status: prediction_metrics_complete` and `squad_replay_status: pending`.
+
+| Predictor | Rows | MAE | RMSE | Mean error | Spearman |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Rolling form | 9,651 | 1.0419 | 2.0961 | 0.0143 | 0.6700 |
+| Direct Ridge | 9,651 | 1.0476 | 1.9927 | 0.0117 | 0.6470 |
+| HDP-GMM with smoothed state rewards | 9,651 | 1.6037 | 2.3122 | 0.4586 | 0.2712 |
+| HDP-HMM with smoothed state rewards | 9,651 | 1.6967 | 2.3871 | 0.5858 | 0.2439 |
+
+On this prefix, rolling form has the lowest MAE and strongest rank correlation;
+Direct Ridge has the lowest RMSE. The state-reward challengers have higher
+point errors and weaker ranking agreement. These are interim forecast metrics
+from one archived season and one seed, not evidence of general superiority.
+The forecast ledgers, metrics, and three charts are saved under
+[`comparison_prefix_gw7_gw19_predictions_only`](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_predictions_only/):
+the [weekly error chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_predictions_only/figures/prediction_error_by_gameweek.png),
+[weekly rank chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_predictions_only/figures/prediction_rank_correlation_by_gameweek.png),
+and [position error chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_predictions_only/figures/prediction_mae_by_position.png).
 
 ## Interim four-predictor comparison: GW7–GW17
 

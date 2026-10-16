@@ -34,25 +34,32 @@ MODEL_COLORS = {
 }
 
 
-def plot_study_artifacts(output_dir: str | Path) -> list[Path]:
-    """Create charts from saved prediction metrics and the sequential replay.
-
-    Inputs are only the persisted CSV artifacts, so plots can be regenerated
-    without fitting models or joining new outcomes.
-    """
+def plot_prediction_artifacts(output_dir: str | Path) -> list[Path]:
+    """Create forecast charts from saved metrics, without requiring a replay."""
     output_dir = Path(output_dir)
     figures_dir = output_dir / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
     weekly = pd.read_csv(output_dir / "prediction_week_metrics.csv")
-    squad = pd.read_csv(output_dir / "squad_gameweeks.csv")
     positions = pd.read_csv(output_dir / "prediction_position_metrics.csv")
 
-    paths = [
+    return [
         _plot_weekly_errors(weekly, figures_dir / "prediction_error_by_gameweek.png"),
         _plot_weekly_rank(weekly, figures_dir / "prediction_rank_correlation_by_gameweek.png"),
         _plot_position_error(positions, figures_dir / "prediction_mae_by_position.png"),
-        _plot_cumulative_squad(squad, figures_dir / "cumulative_squad_points.png"),
     ]
+
+
+def plot_study_artifacts(output_dir: str | Path) -> list[Path]:
+    """Create forecast and squad charts from persisted evaluation artifacts.
+
+    Inputs are only the saved CSV artifacts, so plots can be regenerated
+    without fitting models or joining new outcomes.
+    """
+    output_dir = Path(output_dir)
+    figures_dir = output_dir / "figures"
+    paths = plot_prediction_artifacts(output_dir)
+    squad = pd.read_csv(output_dir / "squad_gameweeks.csv")
+    paths.append(_plot_cumulative_squad(squad, figures_dir / "cumulative_squad_points.png"))
     return paths
 
 

@@ -244,6 +244,31 @@ def test_running_source_can_be_compared_only_through_a_diagnostic_passed_prefix(
     assert predictions_path.read_bytes() == original_predictions
     assert metadata_path.read_bytes() == original_metadata
 
+    prediction_only_dir = tmp_path / "prediction_only"
+    prediction_only = add_direct_ridge_comparison(
+        history,
+        data_path=data_path,
+        source_output_dir=source_dir,
+        output_dir=prediction_only_dir,
+        through_gameweek=3,
+        run_squad_replay=False,
+    )
+    prediction_only_metadata = json.loads(
+        (prediction_only_dir / "run_metadata.json").read_text(encoding="utf-8")
+    )
+    assert prediction_only_metadata["status"] == "prediction_metrics_complete"
+    assert prediction_only_metadata["squad_replay_status"] == "pending"
+    assert prediction_only["squad_summary"] is None
+    assert prediction_only["squad_gameweeks"] is None
+    assert set(prediction_only["prediction_metrics"]["model"]) == {
+        "rolling_form", "direct_ridge", "hdp_gmm", "hdp_hmm"
+    }
+    assert (prediction_only_dir / "prediction_metrics.csv").is_file()
+    assert not (prediction_only_dir / "squad_summary.csv").exists()
+    prediction_only_figures = prediction_only_metadata["visualizations"]
+    assert len(prediction_only_figures) == 3
+    assert all((prediction_only_dir / path).is_file() for path in prediction_only_figures)
+
     with pytest.raises(ValueError, match="last durable forecast"):
         add_direct_ridge_comparison(
             history,
