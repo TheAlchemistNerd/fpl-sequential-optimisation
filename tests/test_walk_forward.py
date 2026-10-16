@@ -235,6 +235,8 @@ def test_sampler_diagnostic_gate_stops_before_forecast_and_saves_failure(tmp_pat
 
 
 def test_resume_continues_only_after_a_screened_contiguous_fold(monkeypatch, tmp_path):
+    import json
+
     from src.research import walk_forward
 
     history = _small_history(weeks=8)
@@ -287,6 +289,19 @@ def test_resume_continues_only_after_a_screened_contiguous_fold(monkeypatch, tmp
     assert set(first["gameweek"]) == {7}
     assert calls == {"gmm": 1, "hmm": 1}
 
+    metadata_path = output / "run_metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["status"] = "running"
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    diagnostics_path = output / "fit_diagnostics.csv"
+    saved_diagnostics = pd.read_csv(diagnostics_path)
+    interrupted_gmm = saved_diagnostics.iloc[-1].copy()
+    interrupted_gmm["gameweek"] = 8
+    interrupted_gmm["model"] = "hdp_gmm"
+    pd.concat(
+        [saved_diagnostics, pd.DataFrame([interrupted_gmm])], ignore_index=True
+    ).to_csv(diagnostics_path, index=False)
+
     resumed, diagnostics, metadata = walk_forward.generate_forecast_ledger(
         history, last_gameweek=8, resume=True, **options
     )
@@ -295,8 +310,9 @@ def test_resume_continues_only_after_a_screened_contiguous_fold(monkeypatch, tmp
     assert calls == {"gmm": 2, "hmm": 2}
     assert metadata["last_forecast_gameweek_written"] == 8
     assert metadata["resume_history"] == [
-        {"previous_status": "forecasts_complete", "previous_last_gameweek": 7}
+        {"previous_status": "running", "previous_last_gameweek": 7}
     ]
+    assert len(pd.read_csv(diagnostics_path)) == 4
 
 
 def test_plot_study_artifacts_regenerates_all_figures_from_saved_csvs(tmp_path):

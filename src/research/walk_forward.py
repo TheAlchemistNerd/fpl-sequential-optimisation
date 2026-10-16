@@ -558,6 +558,26 @@ def _load_resume_state(
     expected_draws = int(expected_metadata["num_samples"]) * int(
         expected_metadata["num_chains"]
     )
+    diagnostic_weeks = diagnostics["gameweek"].astype(int)
+    orphan_mask = diagnostic_weeks > previous_last
+    trim_orphan_diagnostics = orphan_mask.any()
+    if trim_orphan_diagnostics:
+        orphan_diagnostics = diagnostics.loc[orphan_mask]
+        orphan_weeks = set(orphan_diagnostics["gameweek"].astype(int))
+        orphan_models = orphan_diagnostics["model"].astype(str)
+        if (
+            previous_metadata.get("status") != "running"
+            or previous_last >= requested_last
+            or orphan_weeks != {previous_last + 1}
+            or len(orphan_diagnostics) > len(expected_models)
+            or orphan_models.duplicated().any()
+            or not set(orphan_models).issubset(expected_models)
+        ):
+            raise ValueError(
+                "Cannot resume; diagnostics extend beyond the saved forecast prefix"
+            )
+        diagnostics = diagnostics.loc[~orphan_mask].copy()
+
     for gameweek in expected_weeks:
         fold = diagnostics.loc[diagnostics["gameweek"].astype(int) == gameweek]
         if set(fold["model"].astype(str)) != expected_models or len(fold) != 2:
@@ -578,6 +598,12 @@ def _load_resume_state(
                 )
     if set(diagnostics["gameweek"].astype(int)) != set(expected_weeks):
         raise ValueError("Cannot resume; diagnostic rows include an incomplete or failed fold")
+    if trim_orphan_diagnostics:
+        diagnostic_tmp_path = diagnostics_path.with_name(
+            f".{diagnostics_path.name}.resume-tmp"
+        )
+        diagnostics.to_csv(diagnostic_tmp_path, index=False)
+        os.replace(diagnostic_tmp_path, diagnostics_path)
 
     return (
         previous_metadata,

@@ -116,7 +116,7 @@ The full-season command used in the local run is:
 .\venv\Scripts\python.exe -m src.research --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --output reports/research/walk_forward_2023-24/full_season_2023-24 --season 2023-24 --first-gameweek 7 --last-gameweek 38 --warmup 200 --samples 50 --chains 1 --target-accept 0.99 --max-divergence-rate 0.01 --truncation 4 --players-per-position 6 --seed 42
 ~~~
 
-An interrupted run can be continued by repeating its command with `--resume`, the same source file and model settings, and the same output directory. Resume validates the source hash and coverage, fit roster, feature and sampler settings, contiguous player-week ledger, and both models' passing diagnostics before appending the next fold. It refuses a failed, partial, mismatched, or diagnostic-free prefix; use a new output directory when changing the data or configuration.
+An interrupted run can be continued by repeating its command with `--resume`, the same source file and model settings, and the same output directory. Resume validates the source hash and coverage, fit roster, feature and sampler settings, contiguous player-week ledger, and both models' passing diagnostics before appending the next fold. If interruption left one or two diagnostic rows for the next gameweek but no forecast rows, resume drops those orphan rows and refits that fold. Failed runs, partial forecast ledgers, and mismatched or diagnostic-free prefixes are rejected; use a new output directory when changing the data or configuration.
 
 ## Compute placement and troubleshooting record
 
