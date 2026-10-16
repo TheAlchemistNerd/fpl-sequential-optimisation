@@ -108,7 +108,13 @@ The command uses a resource-constrained exploratory setting: one chain, 25 warmu
 
 The run metadata records the input checksum, requested folds, cutoff and feature rules, selected fit cohort, model feature list, seed, truncation, MCMC settings, and JAX device count. Each target fold derives separate GMM and HMM random keys from the seed and gameweek. For exact reproduction, retain the input archive and the dependency versions used for the run.
 
-The longer locally measured configuration uses 200 warmup steps, 50 retained draws, one chain, target acceptance 0.99, four states, and six fit players per position. The full-season runner writes to `reports/research/walk_forward_2023-24/full_season_2023-24/`.
+The longer locally measured configuration uses 200 warmup steps, 50 retained draws, one chain, target acceptance 0.99, four states, and six fit players per position. The full-season runner writes to `reports/research/walk_forward_2023-24/full_season_2023-24/`. This is an exploratory compute setting: passing the divergence and acceptance screen does not establish posterior convergence.
+
+The full-season command used in the local run is:
+
+~~~powershell
+.\venv\Scripts\python.exe -m src.research --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --output reports/research/walk_forward_2023-24/full_season_2023-24 --season 2023-24 --first-gameweek 7 --last-gameweek 38 --warmup 200 --samples 50 --chains 1 --target-accept 0.99 --max-divergence-rate 0.01 --truncation 4 --players-per-position 6 --seed 42
+~~~
 
 An interrupted run can be continued by repeating its command with `--resume`, the same source file and model settings, and the same output directory. Resume validates the source hash and coverage, fit roster, feature and sampler settings, contiguous player-week ledger, and both models' passing diagnostics before appending the next fold. It refuses a failed, partial, mismatched, or diagnostic-free prefix; use a new output directory when changing the data or configuration.
 
@@ -123,7 +129,7 @@ A smaller GW7 diagnostic then used six fit players per position (24 total), four
 | HDP-GMM | 21 / 25 | 0.1011 |
 | HDP-HMM | 25 / 25 | 0.0115 |
 
-The run was stopped after GW7. These forecasts are diagnostic artifacts only: their posterior draws are unreliable, they were not joined to outcomes or used for squad replay, and they must not be treated as model results. A subsequent full run should overwrite the partial ledger and set its metadata status to `complete` only after every fold, scoring, replay, and figure generation succeeds.
+The run was stopped after GW7. These forecasts are diagnostic artifacts only: their posterior draws are unreliable, they were not joined to outcomes or used for squad replay, and they must not be treated as model results. The failed diagnostic ledger is kept separate from the accepted GW7 diagnostic and full-season outputs. A run's metadata status should become `complete` only after every requested fold, scoring, replay, and figure generation succeeds.
 
 The diagnostic prompted two model corrections before another fold was accepted. First, Chapter 5 specifies Normal–Inverse–Wishart degrees of freedom `D + 2`; the equivalent precision-Wishart prior in the model had used `D + 1`. The source now uses `D + 2`, which gives the corresponding inverse-Wishart covariance a finite prior mean under the chapter's identity scale. Second, the finite GMM player weights now use the direct simplex marginal `Dirichlet(alpha * beta)` rather than local Beta sticks. Both GMM and HMM NUTS runners now target a 0.95 acceptance probability, and the setting is configurable and recorded.
 
