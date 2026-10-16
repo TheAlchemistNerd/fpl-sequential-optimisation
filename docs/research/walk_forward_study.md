@@ -165,8 +165,11 @@ every row (`feature_cutoff_gameweek = gameweek - 1`). Full-range scoring and
 replay remain pending. A separate GW7–GW16 four-predictor comparison has
 completed with `status: partial_complete`; its evidence is summarized below.
 The GW17 GMM fit has since passed its screen (0/50 divergences; mean acceptance
-0.9576). The HMM fit is still sampling, so no GW17 forecasts have been written
-and the last durable forecast remains GW16.
+0.9576). At the 2026-10-16 15:04 Africa/Nairobi check, the same process was
+still consuming CPU and the HMM fit had run for at least 21 minutes since that
+GMM diagnostic was observed at 14:43. It had not emitted an HMM diagnostic, so
+no GW17 forecasts had been written and the last durable forecast remained
+GW16. This is a local fold-time observation, not a full-run ETA.
 
 ## Interim four-predictor comparison: GW7–GW16
 
