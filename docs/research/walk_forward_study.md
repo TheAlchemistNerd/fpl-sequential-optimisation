@@ -171,14 +171,11 @@ four-model evaluation.
 
 ## Current run checkpoint
 
-At 2026-10-16 18:04 Africa/Nairobi, the local sampler process (PID 8932) was
-still active and metadata reported `status: running` through GW19. The durable
-forecast ledger contains 9,651 forecasts across GW7–GW19, with unique
-player-week keys, and finite predictions. Every row records
-`feature_cutoff_gameweek` as the target gameweek minus one. All 26 fit
-diagnostics for these thirteen forecast folds passed. The GW20 GMM fit has also
-passed, but the GW20 HMM fit is still pending; no GW20 forecast rows have been
-written before both model diagnostics pass.
+At 2026-10-16 18:29 Africa/Nairobi, the local sampler process (PID 8932) was
+still active and metadata reported `status: running` through GW20. The durable
+forecast ledger contains 10,422 rows across GW7–GW20, with unique player-week
+keys, finite predictions, and each feature cutoff equal to the target week
+minus one. All 28 fit diagnostics for these fourteen forecast folds passed.
 
 | Fold / model | Training rows | Fit players | Active states | Divergences | Mean acceptance | Screen |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
@@ -187,22 +184,22 @@ written before both model diagnostics pass.
 | GW19 HDP-GMM | 408 | 24 | 2 | 0 / 50 | 0.9873 | Pass |
 | GW19 HDP-HMM | 408 | 24 | 2 | 0 / 50 | 0.9971 | Pass |
 | GW20 HDP-GMM | 432 | 24 | 4 | 0 / 50 | 0.9953 | Pass |
+| GW20 HDP-HMM | 432 | 24 | 2 | 0 / 50 | 0.9999 | Pass |
 
-The GW19 HMM diagnostic was written about 37 minutes after its GMM diagnostic.
-These are screening results from one chain with 50 retained draws, not evidence
-of posterior convergence. GW20 HMM, GW21–GW38, and the full-range four-predictor
-evaluation remain pending. At the 18:04 checkpoint, the GW20 HMM had sampled
-for more than 15 minutes after the GW20 GMM diagnostic without writing a result;
-this is a partial runtime observation, not a full-fold or full-run ETA.
+The GW19 HMM diagnostic followed its GMM diagnostic by about 37 minutes. GW20
+HMM has now also passed, with 0/50 divergent draws and mean acceptance
+probability 0.9999; the GW20 forecast was written. The full-study metadata
+remains `running`, with GW21–GW38 and the full-range evaluation pending. These
+one-chain, 50-draw screens do not establish posterior convergence. The observed
+HMM runtimes are checkpoints from this machine, not full-run estimates.
 
-## Prediction-only four-way comparison checkpoint: GW7–GW19
+## Four-way prediction and squad comparison: GW7–GW19
 
-At 17:38 Africa/Nairobi, the separate direct-Ridge pass used the durable GW7–GW19
-core ledger. It matched every saved player-week key, retained the same
-feature cutoff (`target gameweek - 1`), persisted the direct forecasts before
-joining outcomes, and scored all four predictors on the same 9,651 fresh-player
-observations. No squad replay was run for this checkpoint; `run_metadata.json`
-records `status: prediction_metrics_complete` and `squad_replay_status: pending`.
+The separate direct-Ridge pass used the durable GW7–GW19 core prefix after both
+HDP diagnostic gates had passed for every selected gameweek. It matched each
+saved player-week key, preserved `feature_cutoff_gameweek = gameweek - 1`, and
+persisted its direct forecasts before joining outcomes. All four predictors
+were scored on the same 9,651 fresh-player observations:
 
 | Predictor | Rows | MAE | RMSE | Mean error | Spearman |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -211,64 +208,45 @@ records `status: prediction_metrics_complete` and `squad_replay_status: pending`
 | HDP-GMM with smoothed state rewards | 9,651 | 1.6037 | 2.3122 | 0.4586 | 0.2712 |
 | HDP-HMM with smoothed state rewards | 9,651 | 1.6967 | 2.3871 | 0.5858 | 0.2439 |
 
-On this prefix, rolling form has the lowest MAE and strongest rank correlation;
-Direct Ridge has the lowest RMSE. The state-reward challengers have higher
-point errors and weaker ranking agreement. These are interim forecast metrics
-from one archived season and one seed, not evidence of general superiority.
-The forecast ledgers, metrics, and three charts are saved under
-[`comparison_prefix_gw7_gw19_predictions_only`](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_predictions_only/):
-the [weekly error chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_predictions_only/figures/prediction_error_by_gameweek.png),
-[weekly rank chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_predictions_only/figures/prediction_rank_correlation_by_gameweek.png),
-and [position error chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_predictions_only/figures/prediction_mae_by_position.png).
-
-## Interim four-predictor comparison: GW7–GW17
-
-After GW17 passed both sampler screens, the supplementary pass took a stable
-snapshot of the three-model ledger and added a fold-local Ridge challenger for
-the same eleven target gameweeks. Forecasts were persisted before target
-outcomes were joined. All four predictors were evaluated on the same 8,117
-fresh-candidate player-week rows, with `feature_cutoff_gameweek = gameweek - 1`.
-The direct model learns signed points from earlier feature-outcome pairs; GMM
-and HMM use smoothed state rewards estimated from earlier outcomes.
-
-| Predictor | Rows | MAE | RMSE | Mean error | Spearman |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Rolling form | 8,117 | 1.0439 | 2.1044 | 0.0039 | 0.6719 |
-| Direct Ridge | 8,117 | 1.0554 | 2.0075 | 0.0039 | 0.6490 |
-| HDP-GMM with smoothed state rewards | 8,117 | 1.6386 | 2.3535 | 0.4758 | 0.2578 |
-| HDP-HMM with smoothed state rewards | 8,117 | 1.7029 | 2.4095 | 0.5810 | 0.2570 |
-
 Rolling form had the lowest MAE and strongest rank correlation; Direct Ridge
-had the lowest RMSE. Both latent-state reward mappings had higher errors,
-weaker ranking, and positive mean error in this prefix.
-
-All four saved prediction streams then fed the same constrained replay, starting
-from the same seed-42 squad held through GW6. Over GW7–GW17, net points were
-540 for rolling form, 507 for Direct Ridge, 292 for HDP-GMM, and 257 for
-HDP-HMM:
+had the lowest RMSE. The state-reward challengers had higher errors and weaker
+ranking agreement on this one-season prefix. The four streams then fed the
+same 13-week constrained replay, starting from the shared seed-42 squad held
+through GW6:
 
 | Policy | Net points | Gross points | Transfer-hit points | Transfers | Gameweeks |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Rolling-form MILP | 540 | 576 | 36 | 21 | 11 |
-| Direct Ridge MILP | 507 | 507 | 0 | 12 | 11 |
-| HDP-GMM MILP | 292 | 292 | 0 | 12 | 11 |
-| HDP-HMM MILP | 257 | 257 | 0 | 12 | 11 |
+| Rolling-form MILP | 620 | 656 | 36 | 23 | 13 |
+| Direct Ridge MILP | 577 | 577 | 0 | 14 | 13 |
+| HDP-GMM MILP | 355 | 355 | 0 | 14 | 13 |
+| HDP-HMM MILP | 318 | 318 | 0 | 14 | 13 |
 
-This eleven-week, one-season, one-seed replay is an interim result; it does not
-establish general policy superiority. The archive-based prices and candidate
-availability remain proxies. The complete prefix artifacts, including the
-prediction ledgers, replay, metadata, and figures, are saved under
-[`comparison_prefix_gw7_gw17_completed`](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw17_completed/)
-with `status: partial_complete`.
+These forecast and squad results are interim, single-season, single-seed
+evidence and do not establish general predictive or policy superiority. The
+archive-based prices and candidate availability remain proxies. Prediction
+ledgers, scored metrics, replay rows, metadata, and figures are saved under
+[`comparison_prefix_gw7_gw19_completed`](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_completed/).
+The run records `status: partial_complete`: its selected comparison ends at
+GW19 even though the source study has since written GW20. Figures include the
+[weekly error chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_completed/figures/prediction_error_by_gameweek.png),
+[weekly rank chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_completed/figures/prediction_rank_correlation_by_gameweek.png),
+[position error chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_completed/figures/prediction_mae_by_position.png),
+and [cumulative squad-points chart](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_completed/figures/cumulative_squad_points.png).
 
-An initial attempt stopped when PuLP/CBC could not write its MILP input
-(`OSError`, `Errno 28`: no space left on device) with about 296 MB free on C:.
-Clearing the regenerable pip download cache recovered about 479 MB. The retry
-reproduced all six forecast and scoring CSVs byte-for-byte, then completed the
-replay. This resolved the disk-space issue without deleting unrelated files.
+To repeat this comparison, choose a new, empty output directory:
 
-![Cumulative net points for the GW7–GW17 constrained squad replay](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw17_completed/figures/cumulative_squad_points.png)
+~~~powershell
+.\venv\Scripts\python.exe -m src.research.direct_challenger --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --source-output reports/research/walk_forward_2023-24/full_season_2023-24 --output reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw19_reproduction --through-gameweek 19
+~~~
 
+The earlier GW7–GW17 replay remains available as an audit checkpoint under
+[`comparison_prefix_gw7_gw17_completed`](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw17_completed/);
+the GW7–GW19 comparison above supersedes its interim metric and squad tables.
+The first replay attempt at the earlier checkpoint failed because CBC could not
+write its MILP input (`Errno 28`) with about 296 MB free. Clearing the
+regenerable pip cache recovered about 479 MB, after which the replay completed
+and its forecast files matched byte-for-byte. The GW7–GW19 replay has now also
+completed; retain adequate free space before running CBC comparisons.
 An interrupted run can be continued by repeating its command with `--resume`, the same source file and model settings, and the same output directory. Resume validates the source hash and coverage, fit roster, feature settings, contiguous player-week ledger, and both models' passing diagnostics before appending the next fold. If interruption left one or two diagnostic rows for the next gameweek but no forecast rows, resume drops those orphan rows and refits that fold. After a saved sampler-screen failure, resume also verifies that the failed diagnostics belong to exactly the next unwritten fold, archives that attempt in `sampler_retry_history`, and permits a retry to change warmup and target acceptance while keeping the source, roster, seed, retained draws, chain count, model, and divergence gate fixed. Per-fold diagnostic rows record their sampler settings so retries do not misstate the settings used for earlier folds. Invalid or mismatched prefixes remain rejected.
 
 The first GW13 HMM fit exceeded the divergence screen, so its forecasts were withheld. The retry keeps 50 retained draws, one chain, four states, the same seed, and the 1% gate, while increasing warmup and target acceptance:
