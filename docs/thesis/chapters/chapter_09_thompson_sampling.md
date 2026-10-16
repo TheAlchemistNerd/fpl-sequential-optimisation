@@ -100,6 +100,8 @@ $$\mathbb{E}[\text{points}_{j,t+1}] = w^\top \mathbb{E}[x_{j,t+1}] = w^\top \sum
 
 or a more complex model (e.g., Gradient Boosting, Neural Network) trained on historical data.
 
+This direct feature-to-points model is distinct from a state-reward mapping. The direct model learns $f(x_{j,t})$ from earlier feature-outcome pairs and can estimate a signed conditional mean for raw FPL points. A state-reward mapping instead estimates a reward $r_k$ for each latent state from earlier outcomes, then predicts $\sum_k b_j^{(k)}(t)r_k$. Both are possible point-mean predictors; the latter is an outcome mapping after state inference, not a points likelihood in the HDP. A regression loss can estimate either conditional mean without specifying a full predictive distribution.
+
 The **posterior over expected points** for player $j$ is induced by the posterior over $(\mu_k, \Sigma_k)$ and $b_j^{(k)}(t)$. For each MCMC sample $s$:
 
 $$\tilde{\mu}_j^{(s)} = w^\top \sum_{k=1}^K b_j^{(k)}(t) \mu_k^{(s)}.$$
@@ -108,15 +110,17 @@ The collection $\{\tilde{\mu}_j^{(s)}\}_{s=1}^S$ forms the posterior samples of 
 
 ### 9.3.4 Points Distribution
 
-The distribution of actual FPL points $y_{j,t+1}$ (which are discrete and over-dispersed) is modelled as a Negative Binomial distribution parameterised by the expected points:
+For a nonnegative integer, over-dispersed count outcome $y_{j,t+1} \in \{0,1,2,\ldots\}$, a Negative Binomial predictive distribution can be parameterised by its expected value. With shape $r_j > 0$ and success probability $0 < p_j^{(s)} < 1$:
 
 $$y_{j,t+1} \mid \tilde{\mu}_j^{(s)} \sim \text{Negative-Binomial}(r_j, p_j^{(s)}),$$
 
-where $p_j^{(s)}$ is chosen such that $\mathbb{E}[y_{j,t+1}] = \tilde{\mu}_j^{(s)}$. The dispersion parameter $r_j$ is learned from historical data.
+where $p_j^{(s)} = r_j/(r_j + \tilde{\mu}_j^{(s)})$, so that $\mathbb{E}[y_{j,t+1}] = r_j(1-p_j^{(s)})/p_j^{(s)} = \tilde{\mu}_j^{(s)}$ for $\tilde{\mu}_j^{(s)} > 0$; a zero mean is the degenerate boundary case. The dispersion parameter $r_j$ is learned from historical data. Raw FPL `total_points` can be negative (Chapter 3, §3.6.1), so this ordinary Negative Binomial is not a predictive distribution for unmodified FPL totals. A signed-outcome likelihood must be specified for that target; shifting or clipping points would change the modeled outcome and must be defined explicitly.
 
 The **full posterior predictive distribution** for player $j$'s points is:
 
-$$p(y_{j,t+1} \mid \text{data}) = \frac{1}{S} \sum_{s=1}^S \text{Negative-Binomial}(y_{j,t+1} \mid r_j, p_j^{(s)}).$$
+$$p(y_{j,t+1} \mid \text{data}) = \frac{1}{S} \sum_{s=1}^S \text{Negative-Binomial}(y_{j,t+1} \mid r_j, p_j^{(s)}),$$
+
+which is a predictive mixture only for the nonnegative outcome represented by this likelihood, not for raw signed FPL points.
 
 ### 9.3.5 Posterior Sampling
 
@@ -185,6 +189,8 @@ where $\Delta_j = \mu^* - \mu_j$ is the suboptimality gap. This is asymptoticall
 In practice, the posterior may be overconfident (narrower than the true uncertainty), leading to insufficient exploration. A **temperature parameter** $\tau > 0$ can be introduced to inflate the posterior variance:
 
 $$\tilde{y}_j \sim \text{Negative-Binomial}(r_j, p_j(\tilde{\mu}_j / \tau)).$$
+
+This expression is restricted to the nonnegative-count formulation in §9.3.4, where $\tilde{\mu}_j/\tau \geq 0$. It does not define sampling for raw signed FPL points; that requires a signed predictive distribution. As written, dividing the mean by $\tau$ changes the expected count; it does not by itself inflate predictive variance while preserving the mean. A temperature intended to control exploration therefore needs a separately specified and calibrated distributional transformation.
 
 When $\tau > 1$, the posterior is flattened, increasing exploration. When $\tau < 1$, it is sharpened, increasing exploitation. The temperature can be annealed over the season:
 

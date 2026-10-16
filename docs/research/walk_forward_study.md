@@ -7,15 +7,19 @@ This experiment builds the first reproducible research-first comparison for the 
 1. Do the latent-state challengers improve forecasts of player points in the next gameweek over a lagged rolling-form baseline?
 2. Do any forecast differences improve a constrained squad policy after transfers, available bank, free transfers, hits, lineup choice, captaincy, and automatic substitutions are applied?
 
-The first question is the primary predictive evaluation. Squad points are a downstream decision result and are not a substitute for forecast accuracy. The study keeps the thesis chapters unchanged and records implementation evidence here.
+The first question is the primary predictive evaluation. Squad points are a downstream decision result and are not a substitute for forecast accuracy. The thesis remains the conceptual treatment; the chapters now carry a narrow correction to the Negative-Binomial support caveat and posterior parameterization, while this report records implementation evidence.
 
 ## Models and their relationship to the thesis
 
-The comparison contains three predictors:
+The core runner contains three predictors. A supplementary, sampler-free pass
+adds a direct feature-to-points regression challenger after the core run
+completes; it writes to a separate directory and leaves the original HDP
+ledger unchanged. The four-predictor comparison is:
 
 | Predictor | Forecast construction | Role in the comparison |
 | --- | --- | --- |
 | `rolling_form` | Mean points over the five preceding gameweeks; unobserved weeks after first appearance contribute zero | Transparent, non-Bayesian reference |
+| `direct_ridge` | Fold-local Ridge regression from the same nine lagged features to earlier realized points; fixed `alpha=1.0` | Direct supervised challenger; accepts signed point targets |
 | `hdp_gmm` | Gaussian emissions over lagged features; posterior mixture probabilities are mapped to earlier points | Independent latent-state challenger linked to [Chapter 5](../thesis/chapters/chapter_05_hdp_gmm_gaussian_wishart.md) |
 | `hdp_hmm` | Gaussian emissions and shared, action-conditioned transition rows; filtered state probabilities are mapped to earlier points | Temporal latent-state challenger linked to [Chapter 6](../thesis/chapters/chapter_06_hdp_hmm_temporal_dynamics.md) |
 
@@ -26,6 +30,10 @@ This alignment concerns the shared-base prior only; it does not make the current
 The Vaastav archive has no manager-action sequence. The HMM therefore receives one neutral action category. The action-conditioned interface is exercised, but action effects cannot be estimated in this study. The thesis's mean-field extension and reinforcement-learning decision layer are also outside this experiment.
 
 Neither latent model emits FPL points directly. In each fold, posterior state probabilities on the earlier training rows are used to estimate a state-conditioned points reward. The estimate is the responsibility-weighted mean of prior points, smoothed toward the training-wide mean with a prior mass of two observations. The current implementation first averages training and target responsibilities over retained posterior draws, estimates state rewards from the averaged training responsibilities, and then multiplies the target responsibility vector by those reward means. This plug-in mapping is an explicit bridge from the feature-state models to the points objective; it is not a draw-by-draw posterior predictive distribution for points and does not capture points uncertainty.
+
+The `direct_ridge` challenger maps lagged features to points without latent states. Each target fold fits `StandardScaler` and `Ridge(alpha=1.0)` on all earlier player-gameweek feature rows and their realized points labels; it then predicts the saved target-player cohort. The regularization value is fixed rather than selected on target outcomes, and predictions remain continuous and unclipped. This is a direct conditional-mean baseline, not a probabilistic points-emission model. It uses all available earlier player-week rows, whereas the HDP posterior fit uses the fixed 24-player GW1 cohort; that training-scope difference is recorded in comparison metadata.
+
+The thesis already sketches a Negative-Binomial points emission and a product base measure in Chapter 5, and a feature-to-points mapping in Chapter 9. Those are conceptual proposals, not part of the core Gaussian feature likelihood implemented by the current HDP modules. A standard Negative Binomial cannot represent negative raw FPL scores. In the normalized 2023-24 archive used here, the project loader yields 28,742 player-gameweek rows, including 162 negative scores (minimum -4) and 18,344 zero scores; the empirical mean is 1.088 and variance is 5.618. The over-dispersion observation alone does not make the ordinary Negative Binomial valid for this signed target. `direct_ridge` is used as the first direct-points challenger because it predicts the signed conditional mean; a future HDP outcome emission needs a specified likelihood with support for signed scores and a defined joint or conditional relationship to the feature emissions.
 
 The GMM uses the posterior player-specific mixture for the fixed fit cohort and the global mixture for other players. The HMM uses the fitted shared transition model and filters each target player's lagged feature history; a player without a history starts from the global weights. The fit cohort is sampled by position from GW1 with a fixed seed and reused across folds. This limits NUTS runtime and means the study is a cohort pilot, rather than an all-player posterior fit.
 
@@ -42,7 +50,7 @@ Let `t` be the target gameweek and `u` an earlier training gameweek. For each ta
 5. Append the target fold to `predictions.csv`, flush the file, and call `fsync` before advancing to the next fold. The forecast-generation function has no target-outcome lookup.
 6. Only after all requested folds have been persisted does the evaluator read target outcomes and create scored predictions and metrics. The orchestrator performs this forecast scoring before starting the squad replay. Inside replay, each decision uses the as-of feature panel and saved predictions; `outcomes_for_gameweek` is called after `make_decision` returns, to score that decision and update the simulated state. Thus the forecast ledger is persisted before forecast scoring, and the replay strategy cannot see the target-week outcome when selecting its squad.
 
-Each forecast row records its target week, feature cutoff (`t - 1`), player ID, position, price, predictor values, cohort membership, and number of earlier training rows. `candidate_fresh` marks players whose latest archive observation falls within the configured stale window. Forecasts are also generated for older archived players so the constrained replay can assign a score to a held player retained by the manager simulation; forecast-accuracy metrics use only the freshness-filtered pool, common to all three predictors.
+Each core forecast row records its target week, feature cutoff (`t - 1`), player ID, position, price, predictor values, cohort membership, and number of earlier training rows. `candidate_fresh` marks players whose latest archive observation falls within the configured stale window. Forecasts are also generated for older archived players so the constrained replay can assign a score to a held player retained by the manager simulation; forecast-accuracy metrics use only the freshness-filtered pool, common to all predictors in that comparison. The supplementary direct-points pass requires an exact one-to-one match to the saved player-week keys, persists `direct_ridge_predictions.csv` and `predictions_with_direct.csv` in its own output directory, and only then scores target outcomes.
 
 This is an auditable chronological boundary, not proof that the archive reproduces what was visible at an official FPL deadline. Vaastav's merged gameweek rows are not dated deadline snapshots. The archive also lacks official player availability, price-at-deadline, and manager-action histories. Eligibility and features remain archive-based proxies.
 
@@ -82,15 +90,16 @@ Metrics are reported overall, by gameweek, and by position. MAE and RMSE quantif
 
 ## Constrained squad evaluation
 
-The three prediction streams feed the existing wallet-aware squad MILP through the same sequential replay engine:
+The core three prediction streams feed the existing wallet-aware squad MILP through the same sequential replay engine. The supplementary replay adds the Ridge stream under the same constraints:
 
 | Policy | MILP player score |
 | --- | --- |
 | `form_milp` | Lagged rolling-form points |
+| `direct_ridge_milp` | Fold-local direct Ridge point prediction |
 | `hdp_gmm_milp` | Fold-specific HDP-GMM point prediction |
 | `hdp_hmm_milp` | Fold-specific HDP-HMM point prediction |
 
-For each seed, all three policies begin with the same randomly drawn legal GW1 squad and simulated bank. They hold that squad through the configured warm-up and begin optimizing in the first scored gameweek. The replay then applies the same 15-player positional rules, club cap, budget, simulated purchase/sell prices, free-transfer rollover, four-point hits, lineup and captain selection, and autosubstitution scoring to each policy. The default study starts strategy evaluation at GW7 to provide five completed gameweeks before the first target prediction; predictions may continue through GW38.
+For each seed, all policies begin with the same randomly drawn legal GW1 squad and simulated bank. They hold that squad through the configured warm-up and begin optimizing in the first scored gameweek. The replay then applies the same 15-player positional rules, club cap, budget, simulated purchase/sell prices, free-transfer rollover, four-point hits, lineup and captain selection, and autosubstitution scoring to each policy. The default study starts strategy evaluation at GW7 to provide five completed gameweeks before the first target prediction; predictions may continue through GW38.
 
 Squad results include gross and net points, hits, transfers, evaluation-window totals, and weekly squad composition. Starting from a shared squad controls the initial-roster difference within each seed. The archive-based price and availability proxies, single initial seed, and absence of chips or manager-specific ownership history limit interpretation. A higher replay total for one seed does not establish a generally superior strategy.
 
@@ -108,13 +117,37 @@ The command uses a resource-constrained exploratory setting: one chain, 25 warmu
 
 The run metadata records the input checksum, requested folds, cutoff and feature rules, selected fit cohort, model feature list, seed, truncation, MCMC settings, and JAX device count. Each target fold derives separate GMM and HMM random keys from the seed and gameweek. For exact reproduction, retain the input archive and the dependency versions used for the run.
 
-The initial full-season configuration used 200 warmup steps, 50 retained draws, one chain, target acceptance 0.99, four states, and six fit players per position. The full-season runner writes to `reports/research/walk_forward_2023-24/full_season_2023-24/`. This is an exploratory compute setting: passing the divergence and acceptance screen does not establish posterior convergence.
+The full-season runner writes to `reports/research/walk_forward_2023-24/full_season_2023-24/`. Its first configuration used 200 warmup steps, 50 retained draws, one chain, target acceptance 0.99, four states, and six fit players per position. GW13 failed the divergence gate under that setting; the saved failure was retained in retry history, and the runner resumed from the valid GW7–GW12 prefix with 400 warmup steps and target acceptance 0.995. Both configurations are exploratory compute settings: passing the divergence and acceptance screen does not establish posterior convergence.
 
-The full-season command used in the local run is:
+The current resumable command, matching the active run's settings, is:
 
 ~~~powershell
-.\venv\Scripts\python.exe -m src.research --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --output reports/research/walk_forward_2023-24/full_season_2023-24 --season 2023-24 --first-gameweek 7 --last-gameweek 38 --warmup 200 --samples 50 --chains 1 --target-accept 0.99 --max-divergence-rate 0.01 --truncation 4 --players-per-position 6 --seed 42
+.\venv\Scripts\python.exe -m src.research --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --output reports/research/walk_forward_2023-24/full_season_2023-24 --season 2023-24 --first-gameweek 7 --last-gameweek 38 --warmup 400 --samples 50 --chains 1 --target-accept 0.995 --max-divergence-rate 0.01 --truncation 4 --players-per-position 6 --seed 42 --resume
 ~~~
+
+After that three-model run reaches `status: complete`, create the side-by-side
+direct-points comparison without refitting either HDP model:
+
+~~~powershell
+.\venv\Scripts\python.exe -m src.research.direct_challenger --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --source-output reports/research/walk_forward_2023-24/full_season_2023-24 --output reports/research/walk_forward_2023-24/full_season_2023-24/comparison_with_direct --alpha 1.0
+~~~
+
+The supplementary command verifies that the source run is complete and that
+the archive checksum, fold coverage, player-week keys, and feature cutoffs
+match. It writes all direct forecasts before scoring outcomes, then produces
+the four-model prediction metrics, constrained replay, plots, and separate
+metadata under `comparison_with_direct/`. It does not change the original
+three-model artifacts.
+
+## Current run checkpoint
+
+At 2026-10-16 13:53 Africa/Nairobi, the local process was active and responsive;
+`run_metadata.json` reported `status: running` through GW15, with 6,602 forecast
+rows covering GW7–GW15. The latest durable write was at 13:39. No full-run
+scoring, squad replay, comparison figures, or `status: complete` metadata had
+been produced at this checkpoint. These partial core-run files are not final
+results. The supplementary direct Ridge pass is intentionally gated on core
+completion and has not yet run.
 
 An interrupted run can be continued by repeating its command with `--resume`, the same source file and model settings, and the same output directory. Resume validates the source hash and coverage, fit roster, feature settings, contiguous player-week ledger, and both models' passing diagnostics before appending the next fold. If interruption left one or two diagnostic rows for the next gameweek but no forecast rows, resume drops those orphan rows and refits that fold. After a saved sampler-screen failure, resume also verifies that the failed diagnostics belong to exactly the next unwritten fold, archives that attempt in `sampler_retry_history`, and permits a retry to change warmup and target acceptance while keeping the source, roster, seed, retained draws, chain count, model, and divergence gate fixed. Per-fold diagnostic rows record their sampler settings so retries do not misstate the settings used for earlier folds. Invalid or mismatched prefixes remain rejected.
 
@@ -203,14 +236,14 @@ The output directory contains:
 
 The prediction ledger is the key audit artifact: it can be scored again without refitting, while `run_metadata.json` identifies the source and configuration. The metadata status advances from `running` to `forecasts_complete` and finally `complete` as artifacts are produced. An interrupted fold leaves an incomplete prefix and a `running` status. A sampler-screen failure leaves the prior forecast prefix intact, records the failed attempt, and can be retried explicitly; failed diagnostics never enter the accepted fit ledger or generate forecasts.
 
-The nested `diagnostic_pass_gw7/` directory contains the screened, scored, and replayed one-fold diagnostic (`status: diagnostic_complete`). The parent-directory ledger and metadata preserve the earlier 0.8-target run that failed sampling diagnostics; those forecasts were not scored and must not be combined with the passing GW7 artifacts. The separate `full_season_2023-24/` directory contains the in-progress full-season ledger and live run metadata; its partial forecasts are not final metrics or strategy results.
+The nested `diagnostic_pass_gw7/` directory contains the screened, scored, and replayed one-fold diagnostic (`status: diagnostic_complete`). The parent-directory ledger and metadata preserve the earlier 0.8-target run that failed sampling diagnostics; those forecasts were not scored and must not be combined with the passing GW7 artifacts. The separate `full_season_2023-24/` directory contains the in-progress three-predictor ledger and live run metadata; its partial forecasts are not final metrics or strategy results. The later `comparison_with_direct/` directory is created only after the core run completes and contains the matched four-predictor comparison.
 
 The figures are generated from the saved metrics and replay ledger after the CSV artifacts have been written; they do not fit models or fetch outcomes. Error charts show point accuracy, the rank chart shows player-order agreement, and the cumulative replay chart shows realized constrained-portfolio outcomes. Use the CSVs for exact values and the PNGs for visual comparison; a smooth or rising line does not establish a statistically reliable advantage.
 
 ## Reading results and limitations
 
-Inspect the predictive metrics before the squad totals. A latent-state model that produces a better MILP outcome on a single replay but worse point or ranking metrics may have benefited from portfolio constraints, prices, or gameweek variance; it has not thereby demonstrated better forecasts. Compare all three columns on the same player-week panel and all squad policies on the same seed and evaluation weeks.
+Inspect predictive metrics before squad totals. A latent-state model that produces a better MILP outcome on a single replay but worse point or ranking metrics may have benefited from portfolio constraints, prices, or gameweek variance; it has not thereby demonstrated better forecasts. The core runner compares three predictors; the supplementary pass compares all four on the same player-week panel and evaluates all squad policies on the same seed and evaluation weeks.
 
 The inference runner records divergences and mean acceptance probability. The GMM's active-state count uses posterior assignment mass; the HMM's active-state count uses global state-weight mass, so those counts are descriptive and should not be treated as directly comparable. These are basic warning signals, not a convergence assessment. Before making statistical claims, rerun with longer chains, inspect trace plots, effective sample sizes and split R-hat, vary seeds and fit cohorts, and repeat across seasons. The initial one-season result is an engineering and research pilot only.
 
-The current feature vector and reward mapping are practical bridge components for wiring the thesis models into a next-week exercise. They do not implement every thesis proposal: direct points likelihoods, the full action sequence, mean-field coupling, chips, richer point-in-time price/availability snapshots, multi-season validation, and decision policies using posterior uncertainty remain future research work. The thesis remains unchanged; this document records the narrower implemented experiment and its evidence.
+The current feature vector and reward mapping are practical bridge components for wiring the thesis models into a next-week exercise. They do not implement every thesis proposal: a direct points likelihood inside the HDP, the full action sequence, mean-field coupling, chips, richer point-in-time price/availability snapshots, multi-season validation, and decision policies using posterior uncertainty remain future research work. The thesis remains conceptual; this document records the narrower implemented experiment and its evidence.

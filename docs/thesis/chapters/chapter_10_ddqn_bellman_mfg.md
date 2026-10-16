@@ -585,7 +585,7 @@ Additional production refinements:
 ### 10.13.5 FPL Environment with FFBS Belief Updates
 
 The `FPLEnvironment` class provides a **gym-like interface** where state transitions are driven by:
-1.  **NB Posterior Predictive**: Point sampling per player per gameweek using Negative-Binomial distributions parameterised by belief-state expectations.
+1.  **Outcome sampling**: A Negative-Binomial posterior predictive can be used only for a nonnegative count outcome with a nonnegative belief-state mean (Chapter 9, §9.3.4). Raw signed FPL totals require a signed-support likelihood before this environment can sample them.
 2.  **Transition Matrix Multiplication**: Belief state updates via $b_{t+1} = b_t \cdot \pi$, where $\pi$ is the HDP-HMM transition matrix.
 3.  **757-Dimensional State Assembly**: Constructed via `assemble_757_state()` from `belief_state.py`, combining squad encoding, aggregated beliefs, chip availability, and budget metadata.
 

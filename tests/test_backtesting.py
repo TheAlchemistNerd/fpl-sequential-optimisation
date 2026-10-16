@@ -166,6 +166,7 @@ def test_model_score_backtest_uses_saved_predictions_from_common_evaluation_star
                 "player_id": player_id,
                 "hdp_gmm": float(player_id),
                 "hdp_hmm": float(30 - player_id),
+                "direct_ridge": float(player_id / 2),
             }
             for gw in (2, 3)
             for player_id in ids
@@ -173,14 +174,16 @@ def test_model_score_backtest_uses_saved_predictions_from_common_evaluation_star
     )
     result = run_backtest(
         history,
-        strategies=("hdp_gmm_milp",),
+        strategies=("hdp_gmm_milp", "direct_ridge_milp"),
         seeds=(17,),
         prediction_ledger=predictions,
         evaluation_start_gameweek=2,
     )
     assert result.summary.iloc[0]["evaluation_gameweeks"] == 2
-    assert result.gameweeks["is_evaluation_gameweek"].tolist() == [False, True, True]
-    assert result.gameweeks.iloc[1]["transfers"] <= 2
+    assert set(result.summary["strategy"]) == {"hdp_gmm_milp", "direct_ridge_milp"}
+    for _, weekly in result.gameweeks.groupby("strategy", sort=False):
+        assert weekly["is_evaluation_gameweek"].tolist() == [False, True, True]
+        assert weekly.iloc[1]["transfers"] <= 2
 
 
 def test_replay_decides_before_reading_target_gameweek_outcomes(monkeypatch):

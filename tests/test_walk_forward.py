@@ -181,6 +181,19 @@ def test_forecast_evaluation_uses_shared_fresh_pool_and_writes_metrics(tmp_path)
     assert (tmp_path / "predictions_scored.csv").is_file()
     assert (tmp_path / "prediction_position_metrics.csv").is_file()
 
+    direct = predictions.copy()
+    direct["direct_ridge"] = 2.5
+    _, direct_metrics, _ = evaluate_forecast_ledger(
+        history,
+        direct,
+        output_dir=tmp_path / "with_direct",
+        prediction_columns=("rolling_form", "hdp_gmm", "hdp_hmm", "direct_ridge"),
+    )
+    assert set(direct_metrics["model"]) == {
+        "rolling_form", "hdp_gmm", "hdp_hmm", "direct_ridge"
+    }
+    assert direct_metrics["n"].nunique() == 1
+
 
 def test_run_metadata_is_strict_json_and_atomic(tmp_path):
     import json
@@ -441,14 +454,14 @@ def test_plot_study_artifacts_regenerates_all_figures_from_saved_csvs(tmp_path):
         [
             {"gameweek": gw, "model": model, "mae": 1.0 + i, "rmse": 2.0 + i, "spearman": 0.4 - i * 0.1}
             for gw in (7, 8)
-            for i, model in enumerate(("rolling_form", "hdp_gmm", "hdp_hmm"))
+            for i, model in enumerate(("rolling_form", "direct_ridge", "hdp_gmm", "hdp_hmm"))
         ]
     ).to_csv(tmp_path / "prediction_week_metrics.csv", index=False)
     pd.DataFrame(
         [
             {"position": position, "model": model, "mae": 1.0 + i}
             for position in ("GK", "DEF", "MID", "FWD")
-            for i, model in enumerate(("rolling_form", "hdp_gmm", "hdp_hmm"))
+            for i, model in enumerate(("rolling_form", "direct_ridge", "hdp_gmm", "hdp_hmm"))
         ]
     ).to_csv(tmp_path / "prediction_position_metrics.csv", index=False)
     pd.DataFrame(
@@ -460,7 +473,10 @@ def test_plot_study_artifacts_regenerates_all_figures_from_saved_csvs(tmp_path):
                 "is_evaluation_gameweek": True,
                 "evaluation_net_points": points,
             }
-            for strategy, points in (("form_milp", 50), ("hdp_gmm_milp", 55), ("hdp_hmm_milp", 48))
+            for strategy, points in (
+                ("form_milp", 50), ("direct_ridge_milp", 54),
+                ("hdp_gmm_milp", 55), ("hdp_hmm_milp", 48)
+            )
             for gw in (7, 8)
         ]
     ).to_csv(tmp_path / "squad_gameweeks.csv", index=False)

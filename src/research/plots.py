@@ -16,17 +16,21 @@ MODEL_LABELS = {
     "rolling_form": "Rolling form",
     "hdp_gmm": "HDP-GMM",
     "hdp_hmm": "HDP-HMM",
+    "direct_ridge": "Direct Ridge",
     "form_milp": "Rolling-form MILP",
     "hdp_gmm_milp": "HDP-GMM MILP",
     "hdp_hmm_milp": "HDP-HMM MILP",
+    "direct_ridge_milp": "Direct Ridge MILP",
 }
 MODEL_COLORS = {
     "rolling_form": "#0072B2",
     "hdp_gmm": "#D55E00",
     "hdp_hmm": "#009E73",
+    "direct_ridge": "#CC79A7",
     "form_milp": "#0072B2",
     "hdp_gmm_milp": "#D55E00",
     "hdp_hmm_milp": "#009E73",
+    "direct_ridge_milp": "#CC79A7",
 }
 
 
@@ -117,7 +121,11 @@ def _plot_weekly_rank(weekly: pd.DataFrame, destination: Path) -> Path:
 
 def _plot_position_error(positions: pd.DataFrame, destination: Path) -> Path:
     position_order = [position for position in ("GK", "DEF", "MID", "FWD") if position in set(positions["position"])]
-    models = [model for model in ("rolling_form", "hdp_gmm", "hdp_hmm") if model in set(positions["model"])]
+    models = [
+        model
+        for model in ("rolling_form", "direct_ridge", "hdp_gmm", "hdp_hmm")
+        if model in set(positions["model"])
+    ]
     fig, axis = plt.subplots(figsize=(9, 5), constrained_layout=True)
     positions = positions.copy()
     positions["position"] = pd.Categorical(positions["position"], position_order, ordered=True)

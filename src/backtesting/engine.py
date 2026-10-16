@@ -13,6 +13,7 @@ import pandas as pd
 
 from src.backtesting.data import build_as_of_features, outcomes_for_gameweek
 from src.backtesting.strategies import (
+    DEFAULT_STRATEGIES,
     STRATEGIES,
     Decision,
     PREDICTION_STRATEGIES,
@@ -103,7 +104,7 @@ def score_lineup(
 def run_backtest(
     gameweeks: pd.DataFrame,
     *,
-    strategies: Iterable[StrategyName] = STRATEGIES,
+    strategies: Iterable[StrategyName] = DEFAULT_STRATEGIES,
     seeds: Iterable[int] = (42,),
     season: str = "unknown",
     lookback: int = 5,
@@ -153,7 +154,15 @@ def run_backtest(
     if set(strategy_list) & set(PREDICTION_STRATEGIES) and prediction_ledger is None:
         raise ValueError("Model-based strategies require a saved prediction ledger")
     if prediction_ledger is not None:
-        required_prediction_columns = {"gameweek", "player_id", *PREDICTION_STRATEGIES.values()}
+        required_prediction_columns = {
+            "gameweek",
+            "player_id",
+            *(
+                PREDICTION_STRATEGIES[strategy]
+                for strategy in strategy_list
+                if strategy in PREDICTION_STRATEGIES
+            ),
+        }
         missing_prediction_columns = required_prediction_columns - set(prediction_ledger.columns)
         if missing_prediction_columns:
             raise ValueError(

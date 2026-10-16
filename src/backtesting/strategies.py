@@ -22,6 +22,7 @@ StrategyName = Literal[
     "random_valid",
     "hdp_gmm_milp",
     "hdp_hmm_milp",
+    "direct_ridge_milp",
 ]
 STRATEGIES: tuple[StrategyName, ...] = (
     "hold",
@@ -31,10 +32,15 @@ STRATEGIES: tuple[StrategyName, ...] = (
     "random_valid",
     "hdp_gmm_milp",
     "hdp_hmm_milp",
+    "direct_ridge_milp",
+)
+DEFAULT_STRATEGIES: tuple[StrategyName, ...] = tuple(
+    strategy for strategy in STRATEGIES if strategy != "direct_ridge_milp"
 )
 PREDICTION_STRATEGIES = {
     "hdp_gmm_milp": "hdp_gmm",
     "hdp_hmm_milp": "hdp_hmm",
+    "direct_ridge_milp": "direct_ridge",
 }
 POSITION_COUNTS = {"GK": 2, "DEF": 5, "MID": 5, "FWD": 3}
 

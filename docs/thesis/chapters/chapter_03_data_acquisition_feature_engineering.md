@@ -233,7 +233,7 @@ EDA is essential for understanding the data's statistical properties, identifyin
 
 ### 3.6.1 Univariate Analysis
 
-**Distribution of FPL Points**: The distribution of total points per gameweek is heavily right-skewed. The majority of player-gameweek observations yield 1–3 points (minimal involvement), with a long tail of high-scoring performances (goals, assists, clean sheets). This skewness motivates the use of the Negative Binomial model (Chapter 5) for total points, as the Gaussian assumption is violated.
+**Distribution of FPL Points**: Player-gameweek totals are discrete and right-skewed, with a substantial mass at zero and a tail of high-scoring performances. They are not restricted to nonnegative counts: in the normalized 2023–24 Vaastav archive used in the accompanying study ([merged gameweek data](https://github.com/vaastav/Fantasy-Premier-League/blob/master/data/2023-24/gws/merged_gw.csv)), the project loader yields 28,742 player-gameweek rows, of which 162 have negative points (minimum −4) and 18,344 have zero points; the mean is 1.088 and the variance is 5.618. Right skewness and over-dispersion make count models worth investigating, but they do not make an ordinary Negative Binomial valid for raw total points: its support is the nonnegative integers. It is suitable only for a nonnegative count outcome; a model of unmodified FPL totals needs a likelihood that also supports negative values.
 
 **Price Distribution**: Player prices follow a bimodal distribution, with peaks at the lower end (£4.0–5.0m for backups) and the upper end (£10.0–14.0m for elite players). The bimodality reflects the FPL pricing algorithm, which positions players relative to their expected output.
 

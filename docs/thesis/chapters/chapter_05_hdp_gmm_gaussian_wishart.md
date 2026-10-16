@@ -4,7 +4,7 @@
 
 The Hierarchical Dirichlet Process Gaussian Mixture Model (HDP-GMM) is the core latent state estimator in the FPL sequential optimisation framework. It combines the nonparametric clustering power of the HDP (Chapter 4) with a multivariate Gaussian emission model, where each cluster (form profile) is characterised by a mean vector and a covariance matrix. The Gaussian-Wishart (more precisely, Normal-Inverse-Wishart) base measure provides conjugacy, enabling efficient closed-form posterior updates.
 
-The choice of the Normal-Inverse-Wishart base measure is motivated by the structure of the engineered feature space. As detailed in Chapter 3, raw performance counts are transformed into continuous, per-90 normalised rates (e.g., xG/90, ICT/90) and standardised. For such continuous, multivariate data, the Gaussian emission provides a natural likelihood, while the Wishart component captures the full covariance structure between features—modelling, for instance, the correlation between a player's goal threat and their involvement in buildup play. Furthermore, the NIW is the conjugate prior for the multivariate Gaussian, enabling efficient closed-form posterior updates that are critical for the scalability of the Gibbs sampler. While alternative base measures (e.g., Poisson-Gamma for raw counts, Negative-Binomial for over-dispersed points) are theoretically applicable to specific data modalities, the Gaussian-Wishart serves as the principled default for the continuous feature representation central to this framework.
+The choice of the Normal-Inverse-Wishart base measure is motivated by the structure of the engineered feature space. As detailed in Chapter 3, raw performance counts are transformed into continuous, per-90 normalised rates (e.g., xG/90, ICT/90) and standardised. For such continuous, multivariate data, the Gaussian emission provides a natural likelihood, while the Wishart component captures the full covariance structure between features—modelling, for instance, the correlation between a player's goal threat and their involvement in buildup play. Furthermore, the NIW is the conjugate prior for the multivariate Gaussian, enabling efficient closed-form posterior updates that are critical for the scalability of the Gibbs sampler. Alternative base measures (e.g., Poisson-Gamma for raw counts and Negative-Binomial for nonnegative over-dispersed counts) apply to their specified outcome supports; the Gaussian-Wishart serves as the principled default for the continuous feature representation central to this framework.
 
 This chapter provides a detailed mathematical treatment of the HDP-GMM, including the NIW prior specification, conjugate posterior derivations, the modelling of multi-modal player form profiles, the I²GMM extension for within-cluster multi-modality, and the construction of belief states for downstream decision-making.
 
@@ -217,19 +217,23 @@ This model captures the underlying "rate" at which a player produces discrete ev
 
 ### 5.6.2 HDP-Negative-Binomial Model
 
-For total FPL points, which exhibit over-dispersion (variance > mean), the Negative Binomial is preferred:
+The Negative Binomial is a candidate for nonnegative, over-dispersed count outcomes. Under the success-probability parameterization below, $y_{j,i} \in \{0,1,2,\ldots\}$, $r_k > 0$, and $0 < p_k < 1$:
 
-$$x_{j,i} \mid r_k, p_k \sim \text{Negative-Binomial}(r_k, p_k),$$
+$$y_{j,i} \mid r_k, p_k \sim \text{Negative-Binomial}(r_k, p_k), \qquad
+P(y_{j,i}=y \mid r_k,p_k)=\frac{\Gamma(y+r_k)}{\Gamma(r_k)\,y!}p_k^{r_k}(1-p_k)^y,$$
+
+with mean $r_k(1-p_k)/p_k$ and variance $r_k(1-p_k)/p_k^2$. This support condition matters for FPL: raw `total_points` can be negative, so an ordinary Negative Binomial cannot emit the unmodified outcome (see the archive evidence in §3.6.1). A signed points likelihood or an explicitly redefined nonnegative outcome is required before this alternative can be used for FPL totals.
 
 with factorised prior:
 
 $$p_k \sim \text{Beta}(a_0, b_0), \quad r_k \sim \text{Gamma}(c_0, d_0).$$
 
-The posterior for $p_k$ is conjugate:
+Conditional on $r_k$ and the observations assigned to state $k$, the posterior for $p_k$ is conjugate:
 
-$$p_k \mid \text{data} \sim \text{Beta}\left(a_0 + \sum x_{j,i}, \; b_0 + n_k r_k\right).$$
+$$p_k \mid r_k, \{y_{j,i}:z_{j,i}=k\} \sim
+\text{Beta}\left(a_0 + n_k r_k, \; b_0 + \sum_{j,i:z_{j,i}=k} y_{j,i}\right).$$
 
-The posterior for $r_k$ has no closed form and requires Metropolis-Hastings.
+The posterior for $r_k$ has no closed form and requires numerical inference. This conjugate update does not make the model suitable for signed observations; it applies only when every assigned $y_{j,i}$ is a nonnegative count.
 
 ### 5.6.3 Product Base Measure
 
@@ -237,7 +241,7 @@ A comprehensive model can combine all base measures:
 
 $$H = \text{NIW} \times \text{Gamma}^{\otimes E} \times \text{Beta} \times \text{Gamma},$$
 
-where $E$ is the number of discrete event types. Each hidden state then represents a complete player profile with continuous stats, discrete event rates, and total points distribution.
+where $E$ is the number of discrete event types. The Beta-Gamma factor for points is valid only for a nonnegative count outcome; for raw signed FPL totals, this product base measure must be replaced by one whose outcome likelihood has signed support. Each hidden state can then represent a complete player profile with continuous stats, discrete event rates, and the specified outcome distribution.
 
 ## 5.7 Belief State Construction
 
@@ -347,6 +351,6 @@ The library provides the following JIT-compiled kernels:
 
 These kernels allow the conjugate steps to run on GPU/TPU, significantly reducing inference time for large player registries ($N > 10{,}000$). Profiling benchmarks comparing these conjugate kernels to NUTS are available in `tests/test_jax_profiling.py`.
 
-This chapter has presented the HDP-GMM with Gaussian-Wishart base measure in full mathematical detail. The NIW prior provides conjugacy for efficient posterior updates. The truncated stick-breaking construction enables practical implementation. The I²GMM extension addresses within-cluster multi-modality. Alternative base measures (Poisson-Gamma, Negative-Binomial) handle discrete count data and over-dispersed points. The belief state output provides a rich, probabilistic representation of player form. The NumPyro implementation leverages JAX's acceleration for scalable inference.
+This chapter has presented the HDP-GMM with Gaussian-Wishart base measure in full mathematical detail. The NIW prior provides conjugacy for efficient posterior updates. The truncated stick-breaking construction enables practical implementation. The I²GMM extension addresses within-cluster multi-modality. Alternative base measures (Poisson-Gamma and, for nonnegative outcomes, Negative-Binomial) handle specified discrete count data. Raw signed FPL totals require a likelihood with signed support. The belief state output provides a probabilistic representation of player form.
 
 The next chapter extends the HDP-GMM with a Hidden Markov Model layer, capturing the temporal dynamics of player form — not just which state a player is in, but how they transition between states over gameweeks.

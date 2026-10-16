@@ -1021,9 +1021,16 @@ def evaluate_forecast_ledger(
     predictions: pd.DataFrame,
     *,
     output_dir: str | Path,
+    prediction_columns: tuple[str, ...] = PREDICTION_COLUMNS,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Join outcomes only after forecast persistence, then score the ledger."""
     output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    missing_predictions = set(prediction_columns) - set(predictions.columns)
+    if missing_predictions:
+        raise ValueError(
+            f"Forecast ledger is missing prediction columns: {sorted(missing_predictions)}"
+        )
     evaluated_predictions = predictions
     if "candidate_fresh" in evaluated_predictions:
         evaluated_predictions = evaluated_predictions.loc[
@@ -1048,7 +1055,7 @@ def evaluate_forecast_ledger(
     )
     scored = scored_wide.melt(
         id_vars=["season", "seed", "gameweek", "feature_cutoff_gameweek", "player_id", "position", "actual_points"],
-        value_vars=list(PREDICTION_COLUMNS),
+        value_vars=list(prediction_columns),
         var_name="model",
         value_name="prediction",
     )
@@ -1085,6 +1092,7 @@ def run_walk_forward_study(
 ) -> dict[str, pd.DataFrame]:
     """Run forecasts, score them, and replay model scores through the MILP."""
     output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
     predictions, diagnostics, metadata = generate_forecast_ledger(
         gameweeks,
         output_dir=output_dir,
