@@ -192,7 +192,7 @@ def add_direct_ridge_comparison(
     metadata_bytes = metadata_path.read_bytes()
     prediction_hash_before = sha256_file(predictions_path)
     diagnostic_hash_before = sha256_file(diagnostics_path)
-    base = pd.read_csv(predictions_path)
+    base = pd.read_csv(predictions_path, float_precision="round_trip")
     diagnostics = pd.read_csv(diagnostics_path)
     prediction_hash_after = sha256_file(predictions_path)
     diagnostic_hash_after = sha256_file(diagnostics_path)
@@ -319,6 +319,9 @@ def add_direct_ridge_comparison(
     merged = merged.sort_values(["gameweek", "player_id"], kind="stable").reset_index(drop=True)
     predictions_with_direct_path = output_dir / "predictions_with_direct.csv"
     _write_csv_atomic(merged, predictions_with_direct_path)
+    # Score and replay the exact persisted float values so later recomputation
+    # from this forecast ledger reproduces the reported metrics.
+    merged = pd.read_csv(predictions_with_direct_path, float_precision="round_trip")
 
     scored, prediction_metrics, week_metrics = evaluate_forecast_ledger(
         gameweeks,

@@ -72,8 +72,11 @@ def test_supplementary_comparison_keeps_completed_source_run_unchanged(tmp_path)
     import json
 
     from src.backtesting.engine import sha256_file
-    from src.research.direct_challenger import add_direct_ridge_comparison
-    from src.research.walk_forward import build_fold_panels
+    from src.research.direct_challenger import (
+        DIRECT_PREDICTION_COLUMNS,
+        add_direct_ridge_comparison,
+    )
+    from src.research.walk_forward import build_fold_panels, evaluate_forecast_ledger
 
     history = _small_history(weeks=3)
     data_path = tmp_path / "source.csv"
@@ -147,6 +150,17 @@ def test_supplementary_comparison_keeps_completed_source_run_unchanged(tmp_path)
     }
     assert (tmp_path / "comparison" / "direct_ridge_predictions.csv").is_file()
     assert (tmp_path / "comparison" / "predictions_with_direct.csv").is_file()
+    persisted_predictions = pd.read_csv(
+        tmp_path / "comparison" / "predictions_with_direct.csv",
+        float_precision="round_trip",
+    )
+    _, persisted_metrics, _ = evaluate_forecast_ledger(
+        history,
+        persisted_predictions,
+        output_dir=tmp_path / "persisted_recompute",
+        prediction_columns=DIRECT_PREDICTION_COLUMNS,
+    )
+    pd.testing.assert_frame_equal(result["prediction_metrics"], persisted_metrics)
     assert predictions_path.read_bytes() == original_predictions
     assert metadata_path.read_bytes() == original_metadata
 

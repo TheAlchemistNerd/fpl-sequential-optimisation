@@ -545,7 +545,7 @@ def _load_resume_state(
     if saved_last > requested_last:
         raise ValueError("Cannot resume; saved run extends beyond the requested last gameweek")
 
-    predictions = pd.read_csv(ledger_path)
+    predictions = pd.read_csv(ledger_path, float_precision="round_trip")
     if list(predictions.columns) != header:
         raise ValueError("Cannot resume; forecast ledger columns do not match this runner")
     expected_weeks = list(range(first_gameweek, previous_last + 1))
@@ -1009,7 +1009,7 @@ def generate_forecast_ledger(
             metadata["last_forecast_gameweek_written"] = target_gameweek
             _write_metadata(metadata_path, metadata)
 
-    predictions = pd.read_csv(ledger_path)
+    predictions = pd.read_csv(ledger_path, float_precision="round_trip")
     diagnostics = pd.DataFrame(diagnostics_rows)
     metadata["status"] = "forecasts_complete"
     _write_metadata(metadata_path, metadata)
