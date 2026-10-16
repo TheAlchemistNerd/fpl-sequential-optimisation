@@ -1,8 +1,10 @@
-"""Add a direct feature-to-points challenger to a completed HDP study.
+"""Add a direct feature-to-points challenger to an HDP study checkpoint.
 
-The supplementary pass leaves the original three-model run untouched. It
-forecasts each target gameweek with a fold-local Ridge regressor, persists the
-direct forecasts, then scores and replays the shared four-model comparison.
+The source may be a completed run or a diagnostic-validated durable prefix of
+an active run. The supplementary pass leaves the original three-model ledger
+untouched. It forecasts each selected target gameweek with a fold-local Ridge
+regressor, persists the direct forecasts, then scores and optionally replays
+the shared four-model comparison.
 """
 
 from __future__ import annotations

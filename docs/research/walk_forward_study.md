@@ -12,9 +12,11 @@ The first question is the primary predictive evaluation. Squad points are a down
 ## Models and their relationship to the thesis
 
 The core runner contains three predictors. A supplementary, sampler-free pass
-adds a direct feature-to-points regression challenger after the core run
-completes; it writes to a separate directory and leaves the original HDP
-ledger unchanged. The four-predictor comparison is:
+adds a direct feature-to-points regression challenger once the source study has
+a contiguous, diagnostic-validated durable prefix. It can run while the
+full-season HDP study continues by selecting that prefix explicitly; it writes
+to a separate directory and leaves the original HDP ledger unchanged. The
+four-predictor comparison is:
 
 | Predictor | Forecast construction | Role in the comparison |
 | --- | --- | --- |
