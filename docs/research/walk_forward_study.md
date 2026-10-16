@@ -143,10 +143,10 @@ While the full run is still sampling, a durable, diagnostics-passed prefix can
 be compared independently. Specify `--through-gameweek`; the command checks
 that the requested cutoff is no later than the last forecast written, snapshots
 the source ledgers consistently, and labels the result `partial_complete`.
-For the currently saved GW7–GW15 prefix:
+For the currently saved GW7–GW16 prefix:
 
 ~~~powershell
-.\venv\Scripts\python.exe -m src.research.direct_challenger --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --source-output reports/research/walk_forward_2023-24/full_season_2023-24 --through-gameweek 15 --output reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw15 --alpha 1.0
+.\venv\Scripts\python.exe -m src.research.direct_challenger --data "$env:TEMP\fpl_2023_24_merged_gw.csv" --source-output reports/research/walk_forward_2023-24/full_season_2023-24 --through-gameweek 16 --output reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw16 --alpha 1.0
 ~~~
 
 This prefix result is an interim check, not the 38-week comparison. The final
@@ -155,48 +155,55 @@ ledger using the full-range command above.
 
 ## Current run checkpoint
 
-At 2026-10-16 14:21 Africa/Nairobi, the local sampler process (PID 8932) was
+At 2026-10-16 14:36 Africa/Nairobi, the local sampler process (PID 8932) was
 active and responsive. The core metadata reported `status: running` through
 GW16, with 7,359 forecast rows for GW7–GW16. Both GW16 fits passed: GMM had
 0/50 divergences and mean acceptance 0.9984; HMM had 0/50 divergences and mean
 acceptance 0.9917. All 20 diagnostic rows for GW7–GW16 passed. The saved ledger
 has unique player-week keys, finite predictions, and the expected cutoff in
 every row (`feature_cutoff_gameweek = gameweek - 1`). Full-range scoring and
-replay remain pending. A separate GW7–GW15 four-predictor comparison has
+replay remain pending. A separate GW7–GW16 four-predictor comparison has
 completed with `status: partial_complete`; its evidence is summarized below.
 
-## Interim four-predictor comparison: GW7–GW15
+## Interim four-predictor comparison: GW7–GW16
 
-The saved, diagnostic-passed core prefix contains nine target weeks and 6,602
-player-week rows per predictor. Its source ledger was snapshotted and left
-unchanged by the supplementary pass. The pass wrote direct Ridge forecasts
-before joining outcomes, scored all four predictors on the same rows, and then
-replayed all four policies through the same GW15 cutoff. The sidecar metadata
-records the archive fingerprint, source-ledger snapshot hash, exact cutoff,
-and passing sampler gates for the 18 included GMM/HMM fits.
+After GW16 passed both sampler screens, the supplementary pass took a stable
+snapshot of the three-model ledger and added fold-local Ridge forecasts for
+the same ten target gameweeks. All four predictors were scored on the same
+7,359 player-week rows. The direct model used the same pre-target feature
+cutoffs and its signed `total_points` target; forecasts were persisted before
+the target outcomes were joined. All 20 GMM/HMM fit diagnostics in the prefix
+passed. The source ledger remained read-only.
 
 | Predictor | Rows | MAE | RMSE | Mean error | Spearman |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Rolling form | 6,602 | 1.0432 | 2.1030 | 0.0001 | 0.6783 |
-| Direct Ridge | 6,602 | 1.0594 | 2.0086 | 0.0031 | 0.6549 |
-| HDP-GMM with smoothed state rewards | 6,602 | 1.6310 | 2.3618 | 0.4707 | 0.2835 |
-| HDP-HMM with smoothed state rewards | 6,602 | 1.6809 | 2.4013 | 0.5527 | 0.2833 |
+| Rolling form | 7,359 | 1.0365 | 2.0911 | -0.0010 | 0.6798 |
+| Direct Ridge | 7,359 | 1.0496 | 1.9962 | 0.0003 | 0.6579 |
+| HDP-GMM with smoothed state rewards | 7,359 | 1.6278 | 2.3488 | 0.4723 | 0.2840 |
+| HDP-HMM with smoothed state rewards | 7,359 | 1.6881 | 2.4021 | 0.5593 | 0.2678 |
 
-Rolling form had the lowest MAE and highest rank correlation; Direct Ridge had
-the lowest RMSE. Both latent-state reward mappings had larger errors and weaker
-rank correlations on this prefix. In the one-seed constrained replay, net
-points were 441 for rolling form, 391 for Direct Ridge, 215 for HDP-GMM, and
-192 for HDP-HMM. Rolling form incurred 32 hit points across 18 transfers;
-Direct Ridge incurred no hits across 10 transfers. These nine weeks are an
-interim pilot, not a full-season strategy ranking or evidence of general
-superiority. The complete 38-week comparison must be regenerated after the
-core run reaches its final checkpoint.
+Rolling form had the lowest mean absolute error and strongest rank correlation;
+Direct Ridge had the lowest root mean squared error. Both latent-state reward
+maps had larger errors, substantially weaker rank correlation, and positive
+mean error on this prefix. Their state weights therefore did not yet translate
+into competitive point estimates in this pilot.
 
-The prefix artifacts are under
-[`comparison_prefix_gw7_gw15`](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw15/):
-the direct and merged ledgers, scored predictions, overall/week/position
-metrics, replay ledgers and summary, four figures, and `run_metadata.json`
-with `status: partial_complete`.
+The constrained replay advanced all four policies through the same ten
+evaluation gameweeks and used seed 42. Net points were 485 for rolling form,
+455 for Direct Ridge, 254 for HDP-GMM, and 213 for HDP-HMM. Rolling form
+recorded 36 transfer-hit points across 20 transfers; Direct Ridge and both HDP
+policies took 11 transfers each and incurred no hits. These results are a
+ten-week, one-seed interim replay. They do not establish that rolling form is
+generally superior, and they are not the final 38-week comparison.
+
+This ten-week comparison supersedes the earlier GW7–GW15 checkpoint. Its exact
+tables, predictions, replay, figures, and snapshot fingerprints are saved under
+[`comparison_prefix_gw7_gw16`](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw16/),
+with `status: partial_complete` in `run_metadata.json`. The cumulative replay
+figure is shown below; the directory also contains per-gameweek prediction
+error, rank-correlation, and position-level MAE figures.
+
+![Cumulative net points for the GW7–GW16 constrained squad replay](../../reports/research/walk_forward_2023-24/full_season_2023-24/comparison_prefix_gw7_gw16/figures/cumulative_squad_points.png)
 
 An interrupted run can be continued by repeating its command with `--resume`, the same source file and model settings, and the same output directory. Resume validates the source hash and coverage, fit roster, feature settings, contiguous player-week ledger, and both models' passing diagnostics before appending the next fold. If interruption left one or two diagnostic rows for the next gameweek but no forecast rows, resume drops those orphan rows and refits that fold. After a saved sampler-screen failure, resume also verifies that the failed diagnostics belong to exactly the next unwritten fold, archives that attempt in `sampler_retry_history`, and permits a retry to change warmup and target acceptance while keeping the source, roster, seed, retained draws, chain count, model, and divergence gate fixed. Per-fold diagnostic rows record their sampler settings so retries do not misstate the settings used for earlier folds. Invalid or mismatched prefixes remain rejected.
 
@@ -285,7 +292,7 @@ The output directory contains:
 
 The prediction ledger is the key audit artifact: it can be scored again without refitting, while `run_metadata.json` identifies the source and configuration. The metadata status advances from `running` to `forecasts_complete` and finally `complete` as artifacts are produced. An interrupted fold leaves an incomplete prefix and a `running` status. A sampler-screen failure leaves the prior forecast prefix intact, records the failed attempt, and can be retried explicitly; failed diagnostics never enter the accepted fit ledger or generate forecasts.
 
-The nested `diagnostic_pass_gw7/` directory contains the screened, scored, and replayed one-fold diagnostic (`status: diagnostic_complete`). The parent-directory ledger and metadata preserve the earlier 0.8-target run that failed sampling diagnostics; those forecasts were not scored and must not be combined with the passing GW7 artifacts. The separate `full_season_2023-24/` directory contains the in-progress three-predictor ledger and live run metadata; its partial forecasts are not final metrics or strategy results. The `comparison_prefix_gw7_gw15/` directory contains the explicitly bounded interim four-predictor comparison; `comparison_with_direct/` will contain the full 38-week comparison after the core run completes.
+The nested `diagnostic_pass_gw7/` directory contains the screened, scored, and replayed one-fold diagnostic (`status: diagnostic_complete`). The parent-directory ledger and metadata preserve the earlier 0.8-target run that failed sampling diagnostics; those forecasts were not scored and must not be combined with the passing GW7 artifacts. The separate `full_season_2023-24/` directory contains the in-progress three-predictor ledger and live run metadata; its partial forecasts are not final metrics or strategy results. The `comparison_prefix_gw7_gw16/` directory contains the latest explicitly bounded four-predictor comparison; the earlier GW7–GW15 prefix remains a superseded intermediate artifact. `comparison_with_direct/` will contain the full 38-week comparison after the core run completes.
 
 The figures are generated from the saved metrics and replay ledger after the CSV artifacts have been written; they do not fit models or fetch outcomes. Error charts show point accuracy, the rank chart shows player-order agreement, and the cumulative replay chart shows realized constrained-portfolio outcomes. Use the CSVs for exact values and the PNGs for visual comparison; a smooth or rising line does not establish a statistically reliable advantage.
 

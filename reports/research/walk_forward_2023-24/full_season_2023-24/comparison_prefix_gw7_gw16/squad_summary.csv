@@ -1,0 +1,5 @@
+season,seed,strategy,total_net_points,total_gross_points,total_transfer_hits,total_transfers,mean_weekly_points,gameweeks,evaluation_net_points,evaluation_gross_points,evaluation_transfer_hits,evaluation_transfers,evaluation_gameweeks
+2023-24,42,form_milp,588.0,624.0,36,20,36.75,16,485.0,521.0,36,20,10
+2023-24,42,direct_ridge_milp,558.0,558.0,0,11,34.875,16,455.0,455.0,0,11,10
+2023-24,42,hdp_gmm_milp,357.0,357.0,0,11,22.3125,16,254.0,254.0,0,11,10
+2023-24,42,hdp_hmm_milp,316.0,316.0,0,11,19.75,16,213.0,213.0,0,11,10
