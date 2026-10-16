@@ -24,9 +24,11 @@ The run used Vaastav Anand's [Fantasy Premier League repository](https://github.
 
 The archive has no official deadline snapshots, historical availability, actual manager squads, or purchase-price ledgers. Player eligibility and prices use the latest pre-GW archive row, while each simulated policy maintains its own bank and purchase prices after the shared initial squad. Therefore this is a controlled policy comparison over an explicit proxy state, not a reconstruction of actual 2023–24 manager decisions. See [the backtesting implementation note](../engineering/backtesting.md) and the emitted [weekly ledger](../../reports/backtests/2023-24/gameweeks.csv), [summary](../../reports/backtests/2023-24/summary.csv), and [run metadata](../../reports/backtests/2023-24/metadata.json).
 
-## Research questions to answer next
+The first follow-on prediction study is documented in [walk_forward_study.md](walk_forward_study.md). It compares lagged rolling form, HDP-GMM, and HDP-HMM forecasts using chronological 2023–24 folds, then passes each predictor into the constrained squad replay. Its accepted GW7 diagnostic is reported there; the full-season run is still in progress, so no complete-season comparison is available yet.
 
-1. Does the form or xGI signal predict held-out points better when evaluated at the player-gameweek level, before the squad optimizer is considered?
+## Remaining research questions
+
+1. Do the rolling-form, HDP-GMM, and HDP-HMM results reproduce across additional seasons, seeds, and longer sampler runs with convergence diagnostics?
 2. Does the xGI policy remain ahead of form across seeds and other archived seasons under the same information and transfer rules?
 3. Does a thesis-faithful posterior sampling policy improve net points or risk-adjusted outcomes after accounting for transfer hits and saved free transfers?
 4. Do transfer decisions improve on hold and simple lagged baselines when player availability and price data are aligned to actual deadlines?
