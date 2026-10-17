@@ -168,15 +168,16 @@ run the full-range command above after the core source ledger is complete.
 
 ## Current run checkpoint
 
-At 2026-10-17 13:43 Africa/Nairobi, the local sampler was active and metadata
+At 2026-10-17 14:18 Africa/Nairobi, the local sampler was active and metadata
 reported `status: running` through GW25 of 38. The durable forecast ledger
 contains 14,404 rows across GW7–GW25, with unique player-week keys, finite
 predictions, and each feature cutoff equal to the target week minus one. All 38
 diagnostics for these nineteen persisted folds passed. GW26's GMM diagnostic
-has since passed (576 training rows, 24 fit players, four active states, 0/50
-divergences, mean acceptance 0.99955); the HMM diagnostic and GW26 forecast had
-not yet been written at this checkpoint, so the last complete forecast week
-remains GW25.
+passed (576 training rows, 24 fit players, four active states, 0/50
+divergences, mean acceptance 0.99955). At this check, the HMM diagnostic and
+GW26 forecast were still unwritten more than 37 minutes after that diagnostic;
+the sampler process remained responsive and its CPU time continued increasing.
+The last complete forecast week therefore remains GW25.
 
 | Fold / model | Training rows | Fit players | Active states | Divergences | Mean acceptance | Screen |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
