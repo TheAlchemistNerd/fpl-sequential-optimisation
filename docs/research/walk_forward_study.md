@@ -7,7 +7,7 @@ This experiment builds the first reproducible research-first comparison for the 
 1. Do the latent-state challengers improve forecasts of player points in the next gameweek over a lagged rolling-form baseline?
 2. Do any forecast differences improve a constrained squad policy after transfers, available bank, free transfers, hits, lineup choice, captaincy, and automatic substitutions are applied?
 
-The first question is the primary predictive evaluation. Squad points are a downstream decision result and are not a substitute for forecast accuracy. The thesis remains the conceptual treatment; the chapters now carry a narrow correction to the Negative-Binomial support caveat and posterior parameterization, while this report records implementation evidence.
+The first question is the primary predictive evaluation. Squad points are a downstream decision result and are not a substitute for forecast accuracy. The thesis remains the conceptual treatment and already states the Negative-Binomial support limitation; this report records the archive evidence, its consequence for a signed-target direct challenger, and implementation results without repeating the thesis derivation.
 
 ## Models and their relationship to the thesis
 
