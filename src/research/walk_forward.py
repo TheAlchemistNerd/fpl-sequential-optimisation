@@ -25,8 +25,6 @@ from sklearn.preprocessing import StandardScaler
 
 from src.backtesting.data import build_as_of_features, outcomes_for_gameweek
 from src.backtesting.engine import run_backtest, sha256_file
-from src.models.hdp_gmm import run_hdp_gmm
-from src.models.hdp_hmm import run_hdp_hmm
 from src.research.plots import plot_study_artifacts
 
 
@@ -41,6 +39,20 @@ POSITION_FEATURES = ("pos_GK", "pos_DEF", "pos_MID", "pos_FWD")
 MODEL_FEATURES = BASE_FEATURES + POSITION_FEATURES
 PREDICTION_COLUMNS = ("rolling_form", "hdp_gmm", "hdp_hmm")
 MODEL_STRATEGIES = ("form_milp", "hdp_gmm_milp", "hdp_hmm_milp")
+
+
+def run_hdp_gmm(*args: Any, **kwargs: Any) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
+    """Load the NumPyro sampler only when a walk-forward fold needs an HDP fit."""
+    from src.models.hdp_gmm import run_hdp_gmm as fit
+
+    return fit(*args, **kwargs)
+
+
+def run_hdp_hmm(*args: Any, **kwargs: Any) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
+    """Load the NumPyro sampler only when a walk-forward fold needs an HDP fit."""
+    from src.models.hdp_hmm import run_hdp_hmm as fit
+
+    return fit(*args, **kwargs)
 
 
 @dataclass(frozen=True)

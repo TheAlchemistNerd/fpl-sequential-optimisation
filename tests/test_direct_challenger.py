@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -9,6 +10,24 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tests.test_backtesting import _small_history
+
+
+def test_direct_challenger_import_does_not_load_hdp_sampler():
+    repo_root = Path(__file__).resolve().parents[1]
+    check = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; from src.research import direct_challenger; "
+            "assert not {'jax', 'jaxlib', 'numpyro'}.intersection(sys.modules)",
+        ],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+
+    assert check.returncode == 0, check.stderr
 
 
 def test_direct_ridge_fold_is_cutoff_safe_and_handles_signed_targets():
