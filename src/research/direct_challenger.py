@@ -105,8 +105,36 @@ def forecast_direct_ridge_fold(
         # receives a saved score during the later constrained replay.
         max_stale_gameweeks=max_gameweek + 1,
     )
-    train = fold.train.sort_values(["player_id", "gameweek"], kind="stable")
-    target = fold.target.sort_values("player_id", kind="stable")
+    return _forecast_direct_ridge_from_panels(
+        base_fold,
+        fold.train,
+        fold.target,
+        target_gameweek=target_gameweek,
+        alpha=alpha,
+    )
+
+
+def _forecast_direct_ridge_from_panels(
+    base_fold: pd.DataFrame,
+    training_history: pd.DataFrame,
+    target_panel: pd.DataFrame,
+    *,
+    target_gameweek: int,
+    alpha: float,
+) -> pd.DataFrame:
+    """Fit and predict from already-built, point-in-time panels for one fold."""
+    if not (
+        base_fold["feature_cutoff_gameweek"].astype(int) == target_gameweek - 1
+    ).all():
+        raise ValueError(f"Saved GW{target_gameweek} rows have an invalid feature cutoff")
+
+    if not training_history.empty and not (
+        training_history["gameweek"].astype(int) < target_gameweek
+    ).all():
+        raise ValueError(f"Direct Ridge GW{target_gameweek} training rows cross the cutoff")
+
+    train = training_history.sort_values(["player_id", "gameweek"], kind="stable")
+    target = target_panel.sort_values("player_id", kind="stable")
     expected_ids = base_fold["player_id"].astype(int).sort_values().to_numpy()
     target_ids = target["player_id"].astype(int).to_numpy()
     if len(np.unique(expected_ids)) != len(expected_ids):
@@ -115,7 +143,7 @@ def forecast_direct_ridge_fold(
         raise ValueError(
             f"Direct Ridge candidate coverage differs from the saved GW{target_gameweek} ledger"
         )
-    if train.empty or not (train["gameweek"].astype(int) < target_gameweek).all():
+    if train.empty:
         raise ValueError(f"Direct Ridge GW{target_gameweek} training rows cross the cutoff")
 
     train_x = train.loc[:, list(MODEL_FEATURES)].to_numpy(dtype=float)
@@ -285,16 +313,33 @@ def add_direct_ridge_comparison(
     season = str(source_metadata["season"])
     seed = int(source_metadata["seed"])
     lookback = int(source_metadata["feature_lookback_gameweeks"])
+    max_gameweek = int(gameweeks["gameweek"].max())
+    latest_fold = build_fold_panels(
+        gameweeks,
+        effective_last_gameweek,
+        lookback=lookback,
+        max_stale_gameweeks=max_gameweek + 1,
+    )
+    historical_panels = latest_fold.train
     ridge_folds: list[pd.DataFrame] = []
     for gameweek in expected_weeks:
         base_fold = base.loc[base["gameweek"].astype(int) == gameweek].sort_values(
             "player_id", kind="stable"
         )
-        forecast = forecast_direct_ridge_fold(
-            gameweeks,
+        training_history = historical_panels.loc[
+            historical_panels["gameweek"].astype(int) < gameweek
+        ]
+        if gameweek == effective_last_gameweek:
+            target_panel = latest_fold.target
+        else:
+            target_panel = historical_panels.loc[
+                historical_panels["gameweek"].astype(int) == gameweek
+            ].drop(columns=["actual_points"])
+        forecast = _forecast_direct_ridge_from_panels(
             base_fold,
+            training_history,
+            target_panel,
             target_gameweek=gameweek,
-            lookback=lookback,
             alpha=alpha,
         )
         forecast.insert(0, "season", season)

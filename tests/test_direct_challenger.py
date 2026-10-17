@@ -72,6 +72,51 @@ def test_direct_ridge_fold_is_cutoff_safe_and_handles_signed_targets():
     pd.testing.assert_frame_equal(before, after)
 
 
+def test_cached_direct_fold_matches_rebuilt_point_in_time_fold():
+    from src.research.direct_challenger import (
+        _forecast_direct_ridge_from_panels,
+        forecast_direct_ridge_fold,
+    )
+    from src.research.walk_forward import build_fold_panels
+
+    history = _small_history(weeks=6)
+    target_gameweek = 5
+    max_stale = int(history["gameweek"].max()) + 1
+    target_fold = build_fold_panels(
+        history,
+        target_gameweek,
+        max_stale_gameweeks=max_stale,
+    )
+    base_fold = target_fold.target[["player_id"]].copy()
+    base_fold["feature_cutoff_gameweek"] = target_gameweek - 1
+    rebuilt = forecast_direct_ridge_fold(
+        history,
+        base_fold,
+        target_gameweek=target_gameweek,
+    )
+
+    cached_history = build_fold_panels(
+        history,
+        int(history["gameweek"].max()),
+        max_stale_gameweeks=max_stale,
+    )
+    cached_train = cached_history.train.loc[
+        cached_history.train["gameweek"] < target_gameweek
+    ]
+    cached_target = cached_history.train.loc[
+        cached_history.train["gameweek"] == target_gameweek
+    ].drop(columns=["actual_points"])
+    cached = _forecast_direct_ridge_from_panels(
+        base_fold,
+        cached_train,
+        cached_target,
+        target_gameweek=target_gameweek,
+        alpha=1.0,
+    )
+
+    pd.testing.assert_frame_equal(rebuilt, cached)
+
+
 def test_predict_direct_ridge_rejects_misaligned_and_nonfinite_training_data():
     import pytest
 
